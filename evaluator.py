@@ -312,7 +312,7 @@ def apply_grid(bgr_scw_img,
         cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
         cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
 
-    if debug == "weak":
+    if debug == "weak" or debug == "all":
         cv2.imshow("in", bgr_scw_img)
         cv2.imshow("out", draw_img)
         cv2.waitKey()
@@ -406,11 +406,14 @@ def create_work(start_idx, end_idx,
                 path, valid_ids,
                 how_many_people_got_a_question_right_dict, all_users,
                 is_60_question_form, debug, is_barcode_ean13,
-                svm_classifier, knn_classifier,
                 thread_name, max_thread):
+    path_to_models = os.getcwd()
+    svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
+    knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
     max_num = len(os.listdir(path))
     for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
-        # print(f"OMG {user_index + (max_num // max_thread) * thread_name} of {max_num}")
+        current_idx = user_index + (max_num // max_thread) * thread_name
+        print(f"[Thread: {thread_name}] {current_idx} of {end_idx}. {end_idx-current_idx} To do")
         abs_img_path = os.path.join(path, file_name)
         all_users, how_many_people_got_a_question_right_dict = evaluator(abs_img_path, valid_ids,
                                                                          how_many_people_got_a_question_right_dict,
@@ -418,7 +421,7 @@ def create_work(start_idx, end_idx,
                                                                          is_60_question_form, debug,
                                                                          is_barcode_ean13,
                                                                          svm_classifier, knn_classifier)
-
+    return all_users, how_many_people_got_a_question_right_dict
 
 def calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread):
     start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
@@ -432,14 +435,9 @@ def dispatch_multithread(path, numero_di_presenti_effettivi, valid_ids,
                          is_60_question_form, debug,
                          is_barcode_ean13, max_thread=7):
     thread_list = []
-    path_to_models = os.getcwd()
-    svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
-    knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
-
     cargo = [path, valid_ids,
              how_many_people_got_a_question_right_dict, all_users,
-             is_60_question_form, debug, is_barcode_ean13,
-             svm_classifier, knn_classifier]
+             is_60_question_form, debug, is_barcode_ean13]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread)
     print(start_end_idxs)
     for thread_idx in range(max_thread):
@@ -453,26 +451,6 @@ def dispatch_multithread(path, numero_di_presenti_effettivi, valid_ids,
     for thread in thread_list:
         thread.join()
 
-    """thread1 = threading.Thread(target=create_work,
-                               args=(0, numero_di_presenti_effettivi // 2,
-
-                                     "1"))
-    thread2 = threading.Thread(target=create_work,
-                               args=(numero_di_presenti_effettivi // 2, numero_di_presenti_effettivi + 1,
-                                     path, valid_ids,
-                                     how_many_people_got_a_question_right_dict,
-                                     all_users,
-                                     is_60_question_form, debug,
-                                     is_barcode_ean13,
-                                     svm_classifier, knn_classifier,
-                                     "2"))
-
-    thread1.start()
-    thread2.start()
-
-    # Wait for both threads to finish
-    thread1.join()
-    thread2.join()"""
     return all_users, how_many_people_got_a_question_right_dict
 
 

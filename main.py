@@ -1,6 +1,6 @@
 import dearpygui.dearpygui as dpg
 
-from evaluator import evaluator, dispatch_multithread
+from evaluator import create_work, dispatch_multithread
 import custom_utils as cu
 import os
 import xlsxwriter
@@ -67,6 +67,7 @@ class DpgExt:
 
         is_60_question_form = dpg.get_value("60QuestionForm")
         is_barcode_ean13 = dpg.get_value("EAN13")
+        is_multithread = dpg.get_value("MultiThread")
         debug = dpg.get_value("debug")
         max_number_of_tests = dpg.get_value("maxPeople")
         valid_ids = [f"{i:03}" for i in range(max_number_of_tests)] if is_barcode_ean13 else \
@@ -79,13 +80,23 @@ class DpgExt:
 
         placement = 0
         numero_di_presenti_effettivi = len(os.listdir(path))
-
-        all_users, how_many_people_got_a_question_right_dict = dispatch_multithread(path, numero_di_presenti_effettivi,
-                                                                                    valid_ids,
-                                                                                    how_many_people_got_a_question_right_dict,
-                                                                                    all_users,
-                                                                                    is_60_question_form, debug,
-                                                                                    is_barcode_ean13)
+        if is_multithread:
+            all_users, how_many_people_got_a_question_right_dict = dispatch_multithread(
+                path,
+                numero_di_presenti_effettivi,
+                valid_ids,
+                how_many_people_got_a_question_right_dict,
+                all_users,
+                is_60_question_form, debug,
+                is_barcode_ean13)
+        else:
+            all_users, how_many_people_got_a_question_right_dict = create_work(
+                0, numero_di_presenti_effettivi,
+                path, valid_ids,
+                how_many_people_got_a_question_right_dict,
+                all_users, is_60_question_form,
+                debug, is_barcode_ean13,
+                1, 1)
         sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
         for placement, user in enumerate(sorted_by_score_user_list):
             cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_60_question_form)
@@ -215,9 +226,12 @@ def main():
             with dpg.group(horizontal=True, tag="CQN"):
                 dpg.add_text("Simulazione da 60 quesiti?")
                 dpg.add_checkbox(label="", tag="60QuestionForm", default_value=True)
-                dpg.add_spacer(width=125)
+                dpg.add_spacer(width=30)
                 dpg.add_text("EAN13?")
                 dpg.add_checkbox(label="", tag="EAN13", default_value=True)
+                dpg.add_spacer(width=30)
+                dpg.add_text("MultiThread?")
+                dpg.add_checkbox(label="", tag="MultiThread", default_value=True)
             with dpg.group(horizontal=True, tag="DEB"):
                 dpg.add_text("Debug?")
                 dpg.add_combo(items=["No", "weak", "all"], tag="debug")
@@ -257,8 +271,8 @@ def main():
 
 
 if __name__ == '__main__':
-    def_run = 0
-    if def_run:
+    def_run = 1
+    if def_run == 1:
         main()
     else:
         prof_path = r"E:\luglio"
