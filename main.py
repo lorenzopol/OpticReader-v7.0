@@ -257,5 +257,18 @@ def main():
 
 
 if __name__ == '__main__':
-    print("lol")
-    main()
+    def_run = 0
+    if def_run:
+        main()
+    else:
+        prof_path = r"E:\luglio"
+        prof_nof_pres_eff = len(os.listdir(prof_path))
+        prof_valid_ids = [f"{i:03}" for i in range(1000)]
+        prof_how_many_people_got_a_question_right_dict = {i: 0 for i in range(50)}
+        prof_all_users = []
+        prof_is_60_question_form = True
+        prof_debug = "No"
+        prof_is_barcode_ean13 = True
+        dispatch_multithread(prof_path, prof_nof_pres_eff, prof_valid_ids,
+                             prof_how_many_people_got_a_question_right_dict,
+                             prof_all_users, prof_is_60_question_form, prof_debug, prof_is_barcode_ean13)

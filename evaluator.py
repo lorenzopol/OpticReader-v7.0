@@ -1,6 +1,6 @@
 import os
 import threading
-import concurrent.futures
+from multiprocessing import Pool
 import cv2
 
 import imutils
@@ -410,7 +410,7 @@ def create_work(start_idx, end_idx,
                 thread_name, max_thread):
     max_num = len(os.listdir(path))
     for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
-        print(f"OMG {user_index + (max_num//max_thread)*thread_name} of {max_num}")
+        # print(f"OMG {user_index + (max_num // max_thread) * thread_name} of {max_num}")
         abs_img_path = os.path.join(path, file_name)
         all_users, how_many_people_got_a_question_right_dict = evaluator(abs_img_path, valid_ids,
                                                                          how_many_people_got_a_question_right_dict,
@@ -418,7 +418,7 @@ def create_work(start_idx, end_idx,
                                                                          is_60_question_form, debug,
                                                                          is_barcode_ean13,
                                                                          svm_classifier, knn_classifier)
-    print("\n")
+
 
 def calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread):
     start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
