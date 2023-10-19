@@ -1,4 +1,6 @@
 import os
+import threading
+import concurrent.futures
 import cv2
 
 import imutils
@@ -9,6 +11,8 @@ from collections import Counter
 
 from typing import *
 from dataclasses import dataclass, field
+
+from classifiers import *
 
 
 @dataclass(order=True)
@@ -398,7 +402,79 @@ def evaluator(abs_img_path,
     return all_users, how_many_people_got_a_question_right_dict
 
 
-def dispatch_multithread(path):
-    ...
+def create_work(start_idx, end_idx,
+                path, valid_ids,
+                how_many_people_got_a_question_right_dict, all_users,
+                is_60_question_form, debug, is_barcode_ean13,
+                svm_classifier, knn_classifier,
+                thread_name, max_thread):
+    max_num = len(os.listdir(path))
+    for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
+        print(f"OMG {user_index + (max_num//max_thread)*thread_name} of {max_num}")
+        abs_img_path = os.path.join(path, file_name)
+        all_users, how_many_people_got_a_question_right_dict = evaluator(abs_img_path, valid_ids,
+                                                                         how_many_people_got_a_question_right_dict,
+                                                                         all_users,
+                                                                         is_60_question_form, debug,
+                                                                         is_barcode_ean13,
+                                                                         svm_classifier, knn_classifier)
+    print("\n")
+
+def calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread):
+    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
+    start_end_idxs[-1] = numero_di_presenti_effettivi
+    return start_end_idxs
+
+
+def dispatch_multithread(path, numero_di_presenti_effettivi, valid_ids,
+                         how_many_people_got_a_question_right_dict,
+                         all_users,
+                         is_60_question_form, debug,
+                         is_barcode_ean13, max_thread=7):
+    thread_list = []
+    path_to_models = os.getcwd()
+    svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
+    knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+
+    cargo = [path, valid_ids,
+             how_many_people_got_a_question_right_dict, all_users,
+             is_60_question_form, debug, is_barcode_ean13,
+             svm_classifier, knn_classifier]
+    start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread)
+    print(start_end_idxs)
+    for thread_idx in range(max_thread):
+        thread = threading.Thread(target=create_work, args=(start_end_idxs[thread_idx], start_end_idxs[thread_idx + 1],
+                                                            *cargo, thread_idx, max_thread))
+        thread_list.append(thread)
+
+    for thread in thread_list:
+        thread.start()
+
+    for thread in thread_list:
+        thread.join()
+
+    """thread1 = threading.Thread(target=create_work,
+                               args=(0, numero_di_presenti_effettivi // 2,
+
+                                     "1"))
+    thread2 = threading.Thread(target=create_work,
+                               args=(numero_di_presenti_effettivi // 2, numero_di_presenti_effettivi + 1,
+                                     path, valid_ids,
+                                     how_many_people_got_a_question_right_dict,
+                                     all_users,
+                                     is_60_question_form, debug,
+                                     is_barcode_ean13,
+                                     svm_classifier, knn_classifier,
+                                     "2"))
+
+    thread1.start()
+    thread2.start()
+
+    # Wait for both threads to finish
+    thread1.join()
+    thread2.join()"""
+    return all_users, how_many_people_got_a_question_right_dict
+
 
 if __name__ == "__main__":
+    ...

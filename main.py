@@ -1,18 +1,17 @@
 import dearpygui.dearpygui as dpg
 
 from evaluator import evaluator, dispatch_multithread
-from classifiers import *
-
+import custom_utils as cu
 import os
 import xlsxwriter
 
 
-def compute_percentage_error(how_many_people_got_a_question_right_dict):
+def compute_percentage_error(how_many_people_got_a_question_right_dict, numero_di_presenti_effettivi):
     errori_logica = 0
     errori_biologia = 0
     errori_chimica = 0
     errori_matematiaFisica = 0
-    nof_people = 551
+    nof_people = numero_di_presenti_effettivi
     for qst, number_of_correct in how_many_people_got_a_question_right_dict.items():
         nof_error = nof_people - number_of_correct
         if qst in range(0, 9):
@@ -27,6 +26,7 @@ def compute_percentage_error(how_many_people_got_a_question_right_dict):
 
 class DpgExt:
     """dummy class dpg extension"""
+
     @staticmethod
     def draw_answ_table():
         dpg.delete_item("TR")
@@ -72,7 +72,7 @@ class DpgExt:
         valid_ids = [f"{i:03}" for i in range(max_number_of_tests)] if is_barcode_ean13 else \
             [f"{i:04}" for i in range(1000)]
 
-        how_many_people_got_a_question_right_dict = {i: 0 for i in range(60-20*int(not is_60_question_form))}
+        how_many_people_got_a_question_right_dict = {i: 0 for i in range(60 - 20 * int(not is_60_question_form))}
         all_users = []
         workbook = xlsxwriter.Workbook("graduatorie/excel_graduatorie.xlsx")
         workbook.add_worksheet()
@@ -80,26 +80,18 @@ class DpgExt:
         placement = 0
         numero_di_presenti_effettivi = len(os.listdir(path))
 
-        path_to_models = os.getcwd()
-        svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
-        knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
-
-        for user_index, file_name in enumerate(os.listdir(path)):
-            abs_img_path = os.path.join(path, file_name)
-            dpg.set_value("progressCount", f"Analizzando:{file_name}. {user_index}^ scansione analizzata su "
-                                           f"{numero_di_presenti_effettivi}")
-            all_users, how_many_people_got_a_question_right_dict = evaluator(abs_img_path, valid_ids,
-                                                                             how_many_people_got_a_question_right_dict,
-                                                                             all_users,
-                                                                             is_60_question_form, debug,
-                                                                             is_barcode_ean13,
-                                                                             svm_classifier, knn_classifier)
+        all_users, how_many_people_got_a_question_right_dict = dispatch_multithread(path, numero_di_presenti_effettivi,
+                                                                                    valid_ids,
+                                                                                    how_many_people_got_a_question_right_dict,
+                                                                                    all_users,
+                                                                                    is_60_question_form, debug,
+                                                                                    is_barcode_ean13)
         sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
         for placement, user in enumerate(sorted_by_score_user_list):
             cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_60_question_form)
 
         worksheet = workbook.worksheets()[0]
-        compute_percentage_error(how_many_people_got_a_question_right_dict)
+        compute_percentage_error(how_many_people_got_a_question_right_dict, numero_di_presenti_effettivi)
         for col, number_of_people_who_correctly_answered in how_many_people_got_a_question_right_dict.items():
             worksheet.write(3, 3 + col, f"{round(number_of_people_who_correctly_answered / (placement + 1) * 100)}%",
                             workbook.add_format({'bold': 1,
@@ -124,7 +116,7 @@ class DpgExt:
 
     @staticmethod
     def run_excel(sender, app_data, user_data):
-        os.system("start excel excel_graduatorie.xlsx")
+        os.system("start excel graduatorie/excel_graduatorie.xlsx")
         dpg.hide_item("EX")
 
     @staticmethod
@@ -267,4 +259,3 @@ def main():
 if __name__ == '__main__':
     print("lol")
     main()
-
