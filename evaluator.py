@@ -220,7 +220,7 @@ def old_evaluate_square(crop_for_eval, x_index) -> tuple[int, float, int | None]
 
 def apply_grid(bgr_scw_img,
                begin_question_box_y, end_question_box_y,
-               is_60_question_sim,
+               is_60_question_sim, debug,
                svm_classifier, knn_classifier):
     draw_img = bgr_scw_img.copy()
     user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 61 - 20 * int(not is_60_question_sim))}
@@ -240,8 +240,9 @@ def apply_grid(bgr_scw_img,
     x_cuts = get_x_cuts(cols_pos_x)
     x_cuts.append(cols_pos_x[-1])
     # add last col because the 2xforloop need to be up to len - 1
-    """for x_cut in x_cuts:
-        cv2.line(draw_img, (x_cut, 0), (x_cut, 700), Utils.CYAN, 1)"""
+    if debug == "all":
+        for x_cut in x_cuts:
+            cv2.line(draw_img, (x_cut, 0), (x_cut, 700), Utils.CYAN, 1)
 
     y_cuts = get_y_cuts(begin_question_box_y, end_question_box_y)
 
@@ -290,6 +291,7 @@ def apply_grid(bgr_scw_img,
                     # QS
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   Utils.GREEN, 1)
+                    user_answer_dict[question_number] = question_letter
                     found_marked_answer_go_to_next_l = True
 
                 elif predicted_category_index == 2:
@@ -302,12 +304,14 @@ def apply_grid(bgr_scw_img,
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   Utils.RED, 1)
                     # todo: until we have no safe way of determining CA, skip_to_l is reserved for QS
-            user_answer_dict[question_number] = question_letter if user_answer_dict[question_number] != "L" else "L"
+    if debug == "all":
+        cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
+        cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
 
-    """cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
-    cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
-    cv2.imshow("sol", draw_img)
-    cv2.waitKey()"""
+    if debug == "weak":
+        cv2.imshow("in", bgr_scw_img)
+        cv2.imshow("out", draw_img)
+        cv2.waitKey()
     return user_answer_dict
 
 
@@ -384,7 +388,7 @@ def evaluator(abs_img_path,
 
     user_answer_dict = apply_grid(BGR_SCW_img,
                                   transformed_begin_question_box_y, transformed_end_question_box_y,
-                                  is_60_question_sim,
+                                  is_60_question_sim, debug,
                                   svm_classifier, knn_classifier)
 
     score_list: List[float] = generate_score_list(user_answer_dict, how_many_people_got_a_question_right_dict)
