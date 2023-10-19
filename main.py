@@ -1,6 +1,6 @@
 import dearpygui.dearpygui as dpg
 
-from evaluator import evaluator
+from evaluator import evaluator, dispatch_multithread
 from classifiers import *
 
 import os
@@ -84,7 +84,7 @@ class DpgExt:
         svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
         knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
 
-        for user_index, file_name in enumerate(os.listdir(path)[:5]):
+        for user_index, file_name in enumerate(os.listdir(path)):
             abs_img_path = os.path.join(path, file_name)
             dpg.set_value("progressCount", f"Analizzando:{file_name}. {user_index}^ scansione analizzata su "
                                            f"{numero_di_presenti_effettivi}")

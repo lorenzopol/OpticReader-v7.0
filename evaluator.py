@@ -398,5 +398,7 @@ def evaluator(abs_img_path,
     return all_users, how_many_people_got_a_question_right_dict
 
 
+def dispatch_multithread(path):
+    ...
+
 if __name__ == "__main__":
-    evaluator()

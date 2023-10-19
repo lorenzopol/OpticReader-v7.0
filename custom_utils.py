@@ -123,7 +123,6 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_60_question_sim):
 
     h_delta = 3
     for number in range(h_delta, 60 + h_delta-(20*int(not is_60_question_sim))):
-        print(user.score_list)
         worksheet.write(placement + v_delta - 1, number,
                         f'{user.sorted_user_answer_dict[number + 1 - h_delta]}',
                         formats[round(abs(user.score_list[number - h_delta])*2.4)])
