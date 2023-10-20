@@ -256,7 +256,6 @@ def main():
 
 
 def run_with_profiling():
-    import time
     prof_path = r"E:\luglio"
     prof_nof_pres_eff = len(os.listdir(prof_path))
     prof_valid_ids = [f"{i:03}" for i in range(1000)]
@@ -266,18 +265,10 @@ def run_with_profiling():
     prof_debug = "No"
     prof_is_barcode_ean13 = True
 
-    timing_dict = {idx: [] for idx in range(1, 11)}
-    for max_thread in range(3, 11):
-        for attempt in range(3):
-            start = time.perf_counter()
-            all_users, question_distribution = dispatch_multithread(
-                prof_path, prof_nof_pres_eff, prof_valid_ids,
-                prof_question_distribution,
-                prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13, max_thread)
-            timing_dict[max_thread].append(time.perf_counter() - start)
-    print(timing_dict.items())
-    for thread, array_of_times in timing_dict.items():
-        print(f"{thread = } got avg of {round(sum(array_of_times) / 3, 4)}")
+    all_users, question_distribution = dispatch_multithread(
+            prof_path, prof_nof_pres_eff, prof_valid_ids,
+            prof_question_distribution,
+            prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13, max_thread)
 
 
 if __name__ == '__main__':
