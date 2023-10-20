@@ -1,10 +1,6 @@
-import os
 import threading
-from multiprocessing import Pool
-import cv2
 
 import imutils
-import custom_utils as cu
 
 import numpy as np
 from collections import Counter
@@ -60,21 +56,23 @@ class Utils:
 
 
 def one_d_row_slice(img: np.ndarray, y: int) -> np.ndarray:
+    """given a np array it returns the y-th row """
+    assert y + 1 < img.shape[0], f"[ERROR]: one_d_row_slice tried accessing out of bound array: {img} with idx: {y + 1}"
     return img[y:y + 1, :]
 
 
 def one_d_col_slice(img: np.ndarray, x: int) -> np.ndarray:
+    """given a np array it returns the x-th col """
+    assert x + 1 < img.shape[1], f"[ERROR]: one_d_col_slice tried accessing out of bound array: {img} with idx: {x + 1}"
     return img[:, x:x + 1]
 
 
-def from_col_to_row(col):
+def from_col_to_row(col: np.ndarray) -> np.ndarray:
     return col.reshape((1, col.shape[0]))
 
 
-def find_n_black_point_on_row(one_d_sliced):
+def find_n_black_point_on_row(one_d_sliced, bool_threshold: int = 165):
     """refactor may be needed"""
-    bool_threshold: int = 165
-
     bool_arr: np.ndarray = (one_d_sliced < bool_threshold)[0]
 
     positions = np.where(bool_arr == 1)[0]
@@ -362,18 +360,9 @@ def generate_score_list(user_answer_dict: Dict[int, str],
     return score_list
 
 
-def evaluator(abs_img_path,
-              valid_ids, how_many_people_got_a_question_right_dict,
-              all_users, is_60_question_sim, debug, is_barcode_ean13,
-              svm_classifier, knn_classifier):
-    BGR_img = cv2.imread(abs_img_path)
-    cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
-    if cropped_bar_code_id not in valid_ids:
-        cropped_bar_code_id = input(f"BARCODE fallito per {abs_img_path} >>")
-
-    BGR_SC_img: np.array = imutils.resize(BGR_img, height=700)
-    img_h, img_w = BGR_SC_img.shape[0], BGR_SC_img.shape[1]
+def warp_affine_img(BGR_SC_img):
     gr_SC_img: np.array = cv2.cvtColor(BGR_SC_img, cv2.COLOR_BGR2GRAY)
+    img_h, img_w = BGR_SC_img.shape[0], BGR_SC_img.shape[1]
 
     TL_corner = get_top_corner(gr_SC_img, img_w // 2, -1)
     TR_corner = get_top_corner(gr_SC_img, img_w // 2, 1)
@@ -389,7 +378,20 @@ def evaluator(abs_img_path,
 
     transformed_begin_question_box_y = transform_point_with_matrix(begin_question_box_y, warp_mat)
     transformed_end_question_box_y = transform_point_with_matrix(end_question_box_y, warp_mat)
+    return BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y
 
+
+def evaluator(abs_img_path,
+              valid_ids, how_many_people_got_a_question_right_dict,
+              all_users, is_60_question_sim, debug, is_barcode_ean13,
+              svm_classifier, knn_classifier):
+    BGR_img = cv2.imread(abs_img_path)
+    cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
+    if cropped_bar_code_id not in valid_ids:
+        cropped_bar_code_id = input(f"BARCODE fallito per {abs_img_path} >>")
+
+    BGR_SC_img: np.array = imutils.resize(BGR_img, height=700)
+    BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = warp_affine_img(BGR_SC_img)
     user_answer_dict = apply_grid(BGR_SCW_img,
                                   transformed_begin_question_box_y, transformed_end_question_box_y,
                                   is_60_question_sim, debug,
@@ -408,20 +410,21 @@ def create_work(start_idx, end_idx,
                 is_60_question_form, debug, is_barcode_ean13,
                 thread_name, max_thread):
     path_to_models = os.getcwd()
-    svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
-    knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+    loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
+    loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
     max_num = len(os.listdir(path))
     for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
         current_idx = user_index + (max_num // max_thread) * thread_name
-        print(f"[Thread: {thread_name}] {current_idx} of {end_idx}. {end_idx-current_idx} To do")
+        print(f"[Thread: {thread_name}] {current_idx} of {end_idx}. {end_idx - current_idx} To do")
         abs_img_path = os.path.join(path, file_name)
         all_users, how_many_people_got_a_question_right_dict = evaluator(abs_img_path, valid_ids,
                                                                          how_many_people_got_a_question_right_dict,
                                                                          all_users,
                                                                          is_60_question_form, debug,
                                                                          is_barcode_ean13,
-                                                                         svm_classifier, knn_classifier)
+                                                                         loaded_svm_classifier, loaded_knn_classifier)
     return all_users, how_many_people_got_a_question_right_dict
+
 
 def calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread):
     start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
@@ -452,7 +455,3 @@ def dispatch_multithread(path, numero_di_presenti_effettivi, valid_ids,
         thread.join()
 
     return all_users, how_many_people_got_a_question_right_dict
-
-
-if __name__ == "__main__":
-    ...

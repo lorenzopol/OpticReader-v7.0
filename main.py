@@ -271,7 +271,7 @@ def main():
 
 
 if __name__ == '__main__':
-    def_run = 1
+    def_run = 0
     if def_run == 1:
         main()
     else:
