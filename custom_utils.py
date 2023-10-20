@@ -1,9 +1,10 @@
 import cv2
+import numpy as np
 from pyzbar.pyzbar import decode
 import os
 
 
-def crop_to_bounding_rectangle(gray_img):
+def crop_to_bounding_rectangle(gray_img: np.ndarray):
     thresh = cv2.inRange(gray_img, 0, 150)
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     maxArea = 0
@@ -20,7 +21,7 @@ def crop_to_bounding_rectangle(gray_img):
         return gray_img
 
 
-def decode_ean_barcode(cropped_img, is_barcode_ean13=True):
+def decode_ean_barcode(cropped_img: np.ndarray, is_barcode_ean13=True):
     """read a EAN13-barcode and return the candidate IDC (ID Candidato) from -> N-GG-MM-AAAA-IDC"""
     mid = decode(cropped_img)
     if mid:
@@ -58,7 +59,7 @@ def answer_modifier(number, correct):
         print("non è stato salvato alcun file come risposte, creane uno scegliendo l'opzione 1")
 
 
-def xlsx_dumper(user, placement, correct_answers, workbook, is_60_question_sim):
+def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
     formats = [workbook.add_format({'border': 1,
                                     'align': 'center',
                                     'valign': 'vcenter'}),
@@ -80,7 +81,7 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_60_question_sim):
                                                                       'valign': 'vcenter'})
                           )
     # Create question number header
-    _0_header = [*range(1, 61-(20*int(not is_60_question_sim)))]
+    _0_header = [*range(1, 51-(10*int(not is_50_question_sim)))]
     for col_num, data in enumerate(_0_header):
         worksheet.write(0, col_num + 3, data, workbook.add_format({'border': 1,
                                                                    'align': 'center',
@@ -95,7 +96,7 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_60_question_sim):
                                                                            }))
     # Create correct answer header
     _1_header = [*[correct_answers[i].split(";")[0].split(" ")[1]
-                   for i in range(len(correct_answers[:60-(20*int(not is_60_question_sim))]))]]
+                   for i in range(len(correct_answers[:50-(10*int(not is_50_question_sim))]))]]
     for col_num, data in enumerate(_1_header):
         worksheet.write(1, col_num + 3, data, workbook.add_format({'border': 1,
                                                                    'align': 'center',
@@ -103,8 +104,8 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_60_question_sim):
                                                                    "color": "white",
                                                                    "bold": 1,
                                                                    "bg_color": "#4287F5"}))
-    # for percentage mod *range(60)
-    _3_header = ["Posizione", "ID", "Punteggio", *[0] * 0*(60-(20*int(not is_60_question_sim)))]
+    # for percentage mod *range(50)
+    _3_header = ["Posizione", "ID", "Punteggio", *[0] * 0*(50-(10*int(not is_50_question_sim)))]
     for col_num, data in enumerate(_3_header):
         worksheet.write(3, col_num, data, workbook.add_format({'bold': 1,
                                                                'border': 1,
@@ -122,7 +123,24 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_60_question_sim):
                                                                                      'valign': 'vcenter', }))
 
     h_delta = 3
-    for number in range(h_delta, 60 + h_delta-(20*int(not is_60_question_sim))):
+    for number in range(h_delta, 50 + h_delta-(10*int(not is_50_question_sim))):
         worksheet.write(placement + v_delta - 1, number,
                         f'{user.sorted_user_answer_dict[number + 1 - h_delta]}',
                         formats[round(abs(user.score_list[number - h_delta])*2.4)])
+
+
+def calculate_test_complexity_index(qst_distribution, nof_participant, max_score):
+    """ceq = coefficiente di equalizzazione della prova, più è basso, più la prova e facile. Per ottenere il punteggio
+    personale equalizzato (peq) si prende il punteggio non equalizzato (pne) e si aggiunge ceq. Sarà quindi
+    peq = pne+ceq """
+    # struct like {NumeroDomanda: [NumeroDiPersoneCheHannoRispostoCorrettamente,
+    #                              NumeroDiPersoneCheNonHannoRisposto,
+    #                              NumeroDiPersoneCheHannoRispostoSbagliando]}
+    cdf_list = []
+    for _qst_number, array in qst_distribution.items():
+        nof_correct, _nof_blank, nof_wrong = array
+        cdf = (nof_correct - 0.25*nof_wrong) / nof_participant
+        cdf_list.append(cdf)
+    cdfp = sum(cdf_list)
+    ceq = max_score - cdfp
+    return ceq

@@ -6,9 +6,9 @@ from PIL import Image
 from pyzbar.pyzbar import decode
 
 
-def build_sheets(path):
+def build_sheets(path, nof_sheets):
     answer_sheet = cv2.imread(path)
-    for i in range(750):
+    for i in range(nof_sheets):
         print(f"{i}-th iteration started")
         x_beg = answer_sheet.shape[1] // 2
         y_beg = round(answer_sheet.shape[0] * .80)
@@ -61,6 +61,6 @@ def decode_whole_dir(path_to_images):
 
 if __name__ == "__main__":
     print("DANGER: RUN FROM TERMINAL NOT FROM PYCHARM")
-    # build_sheets(r"C:\Users\loren\PycharmProjects\OpticReader v7.0\reduced_res_50QUES.png")
+    build_sheets(os.path.join(os.getcwd(), "reduced_res_50QUES.png"), 750)
     # merge_to_one_pdf(os.path.join(os.getcwd(), "blank_barcoded_tests"))
     decode_whole_dir(os.path.join(os.getcwd(), "blank_barcoded_tests"))

@@ -6,24 +6,6 @@ import os
 import xlsxwriter
 
 
-def compute_percentage_error(how_many_people_got_a_question_right_dict, numero_di_presenti_effettivi):
-    errori_logica = 0
-    errori_biologia = 0
-    errori_chimica = 0
-    errori_matematiaFisica = 0
-    nof_people = numero_di_presenti_effettivi
-    for qst, number_of_correct in how_many_people_got_a_question_right_dict.items():
-        nof_error = nof_people - number_of_correct
-        if qst in range(0, 9):
-            errori_logica += nof_error
-        elif qst in range(9, 32):
-            errori_biologia += nof_error
-        elif qst in range(32, 47):
-            errori_chimica += nof_error
-        elif qst in range(47, 60):
-            errori_matematiaFisica += nof_error
-
-
 class DpgExt:
     """dummy class dpg extension"""
 
@@ -50,7 +32,7 @@ class DpgExt:
 
     @staticmethod
     def confirm_delete(sender, app_data, user_data):
-        for i in range(1, 61):
+        for i in range(1, 51):
             cu.answer_modifier(i, "")
         DpgExt.draw_answ_table()
         DpgExt.exit_confirm("", "", "")
@@ -65,7 +47,7 @@ class DpgExt:
         path = dpg.get_value("pathToScan")
         dpg.show_item("progress")
 
-        is_60_question_form = dpg.get_value("60QuestionForm")
+        is_50_question_sim = dpg.get_value("50QuestionForm")
         is_barcode_ean13 = dpg.get_value("EAN13")
         is_multithread = dpg.get_value("MultiThread")
         debug = dpg.get_value("debug")
@@ -73,7 +55,7 @@ class DpgExt:
         valid_ids = [f"{i:03}" for i in range(max_number_of_tests)] if is_barcode_ean13 else \
             [f"{i:04}" for i in range(1000)]
 
-        how_many_people_got_a_question_right_dict = {i: 0 for i in range(60 - 20 * int(not is_60_question_form))}
+        question_distribution = {i: [0, 0, 0] for i in range(50 - 10 * int(not is_50_question_sim))}
         all_users = []
         workbook = xlsxwriter.Workbook("graduatorie/excel_graduatorie.xlsx")
         workbook.add_worksheet()
@@ -81,30 +63,33 @@ class DpgExt:
         placement = 0
         numero_di_presenti_effettivi = len(os.listdir(path))
         if is_multithread:
-            all_users, how_many_people_got_a_question_right_dict = dispatch_multithread(
+            all_users, question_distribution = dispatch_multithread(
                 path,
                 numero_di_presenti_effettivi,
                 valid_ids,
-                how_many_people_got_a_question_right_dict,
+                question_distribution,
                 all_users,
-                is_60_question_form, debug,
+                is_50_question_sim, debug,
                 is_barcode_ean13)
         else:
-            all_users, how_many_people_got_a_question_right_dict = create_work(
+            all_users, question_distribution = create_work(
                 0, numero_di_presenti_effettivi,
                 path, valid_ids,
-                how_many_people_got_a_question_right_dict,
-                all_users, is_60_question_form,
+                question_distribution,
+                all_users, is_50_question_sim,
                 debug, is_barcode_ean13,
                 1, 1)
+        ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
+        for user in all_users:
+            user.score = round(user.score + ceq)
         sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
         for placement, user in enumerate(sorted_by_score_user_list):
-            cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_60_question_form)
+            cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_50_question_sim)
 
         worksheet = workbook.worksheets()[0]
-        compute_percentage_error(how_many_people_got_a_question_right_dict, numero_di_presenti_effettivi)
-        for col, number_of_people_who_correctly_answered in how_many_people_got_a_question_right_dict.items():
-            worksheet.write(3, 3 + col, f"{round(number_of_people_who_correctly_answered / (placement + 1) * 100)}%",
+        for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
+            nof_correct, nof_not_given, nof_wrong = people_who_got_correct_not_given_and_wrong_answ
+            worksheet.write(3, 3 + col, f"{round(nof_correct / (placement + 1) * 100)}%",
                             workbook.add_format({'bold': 1,
                                                  'border': 1,
                                                  'align': 'center',
@@ -136,7 +121,7 @@ class DpgExt:
         question_number = int(user_data.split(":")[0])
         cu.answer_modifier(question_number, new_answer)
         DpgExt.draw_answ_table()
-        if question_number < 60:
+        if question_number < 50:
             dpg.set_value("BuilderNumber", f"{question_number + 1}:")
         else:
             dpg.set_value("BuilderNumber", f"{1}:")
@@ -224,8 +209,8 @@ def main():
                 dpg.add_input_int(label="", tag="maxPeople", width=250, default_value=800)
                 dpg.add_spacer(height=20)
             with dpg.group(horizontal=True, tag="CQN"):
-                dpg.add_text("Simulazione da 60 quesiti?")
-                dpg.add_checkbox(label="", tag="60QuestionForm", default_value=True)
+                dpg.add_text("Simulazione da 50 quesiti?")
+                dpg.add_checkbox(label="", tag="50QuestionForm", default_value=True)
                 dpg.add_spacer(width=30)
                 dpg.add_text("EAN13?")
                 dpg.add_checkbox(label="", tag="EAN13", default_value=True)
@@ -256,7 +241,7 @@ def main():
             dpg.add_spacer(width=200)
             dpg.add_button(label="Excel", callback=DpgExt.run_excel)
 
-    dpg.create_viewport(title='Lettore Ottico v6.1', width=800, height=600)
+    dpg.create_viewport(title='Lettore Ottico v7.0', width=800, height=600)
     dpg.setup_dearpygui()
     dpg.show_viewport()
 
@@ -270,19 +255,35 @@ def main():
     dpg.destroy_context()
 
 
+def run_with_profiling():
+    import time
+    prof_path = r"E:\luglio"
+    prof_nof_pres_eff = len(os.listdir(prof_path))
+    prof_valid_ids = [f"{i:03}" for i in range(1000)]
+    prof_all_users = []
+    prof_is_50_question_sim = True
+    prof_question_distribution = {i: [0, 0, 0] for i in range(50 - 10 * int(not prof_is_50_question_sim))}
+    prof_debug = "No"
+    prof_is_barcode_ean13 = True
+
+    timing_dict = {idx: [] for idx in range(1, 11)}
+    for max_thread in range(3, 11):
+        for attempt in range(3):
+            start = time.perf_counter()
+            all_users, question_distribution = dispatch_multithread(
+                prof_path, prof_nof_pres_eff, prof_valid_ids,
+                prof_question_distribution,
+                prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13, max_thread)
+            timing_dict[max_thread].append(time.perf_counter() - start)
+    print(timing_dict.items())
+    for thread, array_of_times in timing_dict.items():
+        print(f"{thread = } got avg of {round(sum(array_of_times) / 3, 4)}")
+
+
 if __name__ == '__main__':
-    def_run = 0
+    def_run = int(input("Choose running option\n 1. Default \n 2. Profiling \n >> "))
     if def_run == 1:
         main()
     else:
-        prof_path = r"E:\luglio"
-        prof_nof_pres_eff = len(os.listdir(prof_path))
-        prof_valid_ids = [f"{i:03}" for i in range(1000)]
-        prof_how_many_people_got_a_question_right_dict = {i: 0 for i in range(50)}
-        prof_all_users = []
-        prof_is_60_question_form = True
-        prof_debug = "No"
-        prof_is_barcode_ean13 = True
-        dispatch_multithread(prof_path, prof_nof_pres_eff, prof_valid_ids,
-                             prof_how_many_people_got_a_question_right_dict,
-                             prof_all_users, prof_is_60_question_form, prof_debug, prof_is_barcode_ean13)
+        run_with_profiling()
+

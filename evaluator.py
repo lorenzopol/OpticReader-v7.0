@@ -1,3 +1,4 @@
+import os
 import threading
 
 import imutils
@@ -197,7 +198,8 @@ def cast_square_to_circle(predicted_category_from_cls):
         return Utils.EVAL_CODE_TO_IDX["CA"]
 
 
-def evaluate_square(cropped_to_bound, x_index, svm_classifier, knn_classifier):
+def evaluate_square(cropped_to_bound: np.ndarray, x_index: int,
+                    svm_classifier: SVC, knn_classifier: KNeighborsClassifier):
     """given the extracted image containing only a square/circle, evaluate its corresponding tag based on
     Utils.IDX_TO_EVAL_CODE """
 
@@ -224,7 +226,7 @@ def evaluate_square(cropped_to_bound, x_index, svm_classifier, knn_classifier):
         return chosen_pred
 
 
-def old_evaluate_square(crop_for_eval, x_index) -> tuple[int, float, int | None]:
+def old_evaluate_square(crop_for_eval: np.ndarray, x_index: int) -> tuple[int, float, int | None]:
     """latest iteration of the old generation of evaluators. Its rationale is 'given a square, compute a weighted
     average over the pixel in the crop giving max value to those black pixel along the diagonals'"""
     mask = build_masks(12, 2)
@@ -254,12 +256,14 @@ def old_evaluate_square(crop_for_eval, x_index) -> tuple[int, float, int | None]
             return Utils.EVAL_CODE_TO_IDX.get("CA"), average, None
 
 
-def apply_grid(bgr_scw_img,
-               begin_question_box_y, end_question_box_y,
-               is_60_question_sim, debug,
-               svm_classifier, knn_classifier):
+def evaluate_image(bgr_scw_img: np.ndarray,
+                   begin_question_box_y: int, end_question_box_y: int,
+                   is_50_question_sim: int, debug: str,
+                   loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier):
+    """heavy lifter of the program. given a processed image, return a dictionary with key: question number and
+    value: given answer"""
     draw_img = bgr_scw_img.copy()
-    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 61 - 20 * int(not is_60_question_sim))}
+    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 51 - 10 * int(not is_50_question_sim))}
 
     gray_img = cv2.cvtColor(bgr_scw_img, cv2.COLOR_BGR2GRAY)
     cols_pos_sample_point_y = (bgr_scw_img.shape[0] * 6) // 7
@@ -282,7 +286,6 @@ def apply_grid(bgr_scw_img,
 
     y_cuts = get_y_cuts(begin_question_box_y, end_question_box_y)
 
-    found_marked_answer_go_to_next_l = False
     for y_index in range(len(y_cuts) - 1):
         for x_index in range(len(x_cuts) - 1):
             # if we are on a number col, skip it
@@ -293,15 +296,9 @@ def apply_grid(bgr_scw_img,
             question_letter = Utils.LETTERS[x_index % 7]
 
             if question_letter == "L":
-                # if we are on a new question, open the checks for new answers
-                found_marked_answer_go_to_next_l = False
+                continue
 
-            else:
-                if found_marked_answer_go_to_next_l:
-                    # if an answer has been found for this question, skip to the next
-                    continue
-
-            if question_number >= 51:
+            if question_number >= 51 - 10 * int(not is_50_question_sim):
                 continue
 
             x_top_left = int(not x_index % 7) + x_cuts[x_index]
@@ -315,31 +312,32 @@ def apply_grid(bgr_scw_img,
             cropped: np.array = gray_img[y_top_left:y_bottom_right, x_top_left:x_bottom_right]
             cropped_to_bound = cu.crop_to_bounding_rectangle(cropped)
             resized_crop = cv2.resize(cropped_to_bound, (Utils.CLASSIFIER_IMG_DIM, Utils.CLASSIFIER_IMG_DIM))
-            predicted_category_index = evaluate_square(resized_crop, x_index,
-                                                       svm_classifier, knn_classifier)
+            predicted_category_index = evaluate_square(resized_crop, x_index, loaded_svm_classifier,
+                                                       loaded_knn_classifier)
 
-            if predicted_category_index in (0, 3):
+            if predicted_category_index in (Utils.EVAL_CODE_TO_IDX.get("QB"), Utils.EVAL_CODE_TO_IDX.get("QA")):
                 continue
 
             if x_index % 7:
                 # è un quadrato
-                if predicted_category_index in (1, 4):
+                if predicted_category_index in (Utils.EVAL_CODE_TO_IDX.get("QS"), Utils.EVAL_CODE_TO_IDX.get("CA")):
                     # QS
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   Utils.GREEN, 1)
                     user_answer_dict[question_number] = question_letter
-                    found_marked_answer_go_to_next_l = True
 
-                elif predicted_category_index == 2:
+                elif predicted_category_index == Utils.EVAL_CODE_TO_IDX.get("QA"):
                     # QA
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   Utils.RED, 1)
             else:
-                if predicted_category_index in (1, 2, 4):
+                if predicted_category_index in (Utils.EVAL_CODE_TO_IDX.get("QS"),
+                                                Utils.EVAL_CODE_TO_IDX.get("QA"), Utils.EVAL_CODE_TO_IDX.get("CA")):
                     # CA
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   Utils.RED, 1)
-                    # todo: until we have no safe way of determining CA, skip_to_l is reserved for QS
+                    user_answer_dict[question_number] = "L"
+
     if debug == "all":
         cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
         cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
@@ -352,25 +350,31 @@ def apply_grid(bgr_scw_img,
 
 
 def calculate_single_sub_score(score_list):
-    """Divide scores for each subject. L'ORDINE IN RETURN CONTA"""
+    """Divide scores for each subject. order in return matter!"""
     noq_for_sub = {
-        "Cultura": [0, 7],
-        "biologia": [8, 22],
-        "chimicaFisica": [23, 37],
+        "Cultura": [0, 8],
+        "biologia": [8, 23],
+        "chimicaFisica": [23, 38],
         "matematicaLogica": [38, 50]
     }
-    risultati_biologia = score_list[noq_for_sub.get("biologia")[0]:noq_for_sub.get("biologia")[1]]
-    risultati_chimicaFisica = score_list[noq_for_sub.get("chimicaFisica")[0]:noq_for_sub.get("chimicaFisica")[1]]
+    risultati_Cultura = score_list[
+                        noq_for_sub.get("Cultura")[0]:noq_for_sub.get("Cultura")[1]]
+    risultati_biologia = score_list[
+                         noq_for_sub.get("biologia")[0]:noq_for_sub.get("biologia")[1]]
+    risultati_chimicaFisica = score_list[
+                              noq_for_sub.get("chimicaFisica")[0]:noq_for_sub.get("chimicaFisica")[1]]
     risultati_matematicaLogica = score_list[
                                  noq_for_sub.get("matematicaLogica")[0]:noq_for_sub.get("matematicaLogica")[1]]
-    risultati_Cultura = score_list[noq_for_sub.get("Cultura")[0]:noq_for_sub.get("Cultura")[1]]
 
     return [sum(risultati_biologia), sum(risultati_chimicaFisica),
             sum(risultati_matematicaLogica), sum(risultati_Cultura)]
 
 
 def generate_score_list(user_answer_dict: Dict[int, str],
-                        how_many_people_got_a_question_right_dict: Dict[int, int]):
+                        question_distribution: dict[int, list[int, int, int]]) \
+        -> tuple[list[float], dict[int, list[int, int, int]]]:
+    """given the answer that a user has submitted, calculate if they are right or not and assign it
+    corresponding score"""
     correct_answers: list = cu.retrieve_or_display_answers()
 
     score_list: List[float] = []
@@ -380,21 +384,33 @@ def generate_score_list(user_answer_dict: Dict[int, str],
         number, letter = pre[0].split(" ")
         user_letter = user_answer_dict[i + 1]
         if letter == "*" or user_letter == "L":
+            # question got canceled or the user decided to lock the answer
             score_list.append(0)
             user_answer_dict[i + 1] = ""
             continue
         if not user_letter:
+            # no given answer
             score_list.append(0)
+            # add that this person did not answer this question
+            question_distribution[i][1] += 1
         else:
             if user_letter in letter:
+                # check if the given letter is IN the corrected letters (no "==" since, by mistake, more options
+                # could be correct)
                 score_list.append(1)
-                how_many_people_got_a_question_right_dict[i] += 1
+
+                # add that this person got the i-th question correct
+                question_distribution[i][0] += 1
             else:
                 score_list.append(-0.25)
-    return score_list
+
+                # add that this person got the i-th question wrong
+                question_distribution[i][2] += 1
+    return score_list, question_distribution
 
 
-def warp_affine_img(BGR_SC_img):
+def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
+    """warp affine the scaled image to straight the question box and make it fit full width"""
     gr_SC_img: np.array = cv2.cvtColor(BGR_SC_img, cv2.COLOR_BGR2GRAY)
     img_h, img_w = BGR_SC_img.shape[0], BGR_SC_img.shape[1]
 
@@ -415,66 +431,87 @@ def warp_affine_img(BGR_SC_img):
     return BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y
 
 
-def evaluator(abs_img_path,
-              valid_ids, how_many_people_got_a_question_right_dict,
-              all_users, is_60_question_sim, debug, is_barcode_ean13,
-              svm_classifier, knn_classifier):
+def evaluator(abs_img_path: str | os.PathLike | bytes,
+              valid_ids: list[str], question_distribution: dict[int, list[int, int, int]],
+              all_users: list[User], is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
+              loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier) \
+        -> tuple[list[User], dict[int, list[int, int, int]]]:
+    """entry point of application. Responsible for:
+        - reading the image,
+        - evaluate barcode value,
+        - retrieve user given answer,
+        - create User object"""
     BGR_img = cv2.imread(abs_img_path)
     cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
     if cropped_bar_code_id not in valid_ids:
-        cropped_bar_code_id = input(f"BARCODE fallito per {abs_img_path} >>")
+        cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
 
-    BGR_SC_img: np.array = imutils.resize(BGR_img, height=700)
+    BGR_SC_img = imutils.resize(BGR_img, height=700)
     BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = warp_affine_img(BGR_SC_img)
-    user_answer_dict = apply_grid(BGR_SCW_img,
-                                  transformed_begin_question_box_y, transformed_end_question_box_y,
-                                  is_60_question_sim, debug,
-                                  svm_classifier, knn_classifier)
+    user_answer_dict = evaluate_image(BGR_SCW_img,
+                                      transformed_begin_question_box_y, transformed_end_question_box_y,
+                                      is_50_question_sim, debug,
+                                      loaded_svm_classifier, loaded_knn_classifier)
 
-    score_list: List[float] = generate_score_list(user_answer_dict, how_many_people_got_a_question_right_dict)
-    per_sub_score = calculate_single_sub_score(score_list) if is_60_question_sim else []
-    user = User(cropped_bar_code_id, round(sum(score_list), 2), per_sub_score, score_list, user_answer_dict)
+    # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
+    score_list, question_distribution = generate_score_list(
+        user_answer_dict, question_distribution)
+    per_sub_score = calculate_single_sub_score(score_list) if is_50_question_sim else []
+
+    # create user
+    user = User(cropped_bar_code_id, sum(score_list), per_sub_score, score_list, user_answer_dict)
     all_users.append(user)
-    return all_users, how_many_people_got_a_question_right_dict
+    return all_users, question_distribution
 
 
-def create_work(start_idx, end_idx,
-                path, valid_ids,
-                how_many_people_got_a_question_right_dict, all_users,
-                is_60_question_form, debug, is_barcode_ean13,
-                thread_name, max_thread):
+def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_thread: int) -> list[int]:
+    """given the max number of thread, calculates how many files each worker has to evaluate.
+    If numero_di_presenti_effettivi is not divisible by max_thread, remaning work is assigned to last worker"""
+    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
+    if len(start_end_idxs) == max_thread:
+        start_end_idxs.append(numero_di_presenti_effettivi)
+    else:
+        start_end_idxs[-1] = numero_di_presenti_effettivi
+    if len(start_end_idxs) == 1:
+        start_end_idxs.insert(0, 0)
+    return start_end_idxs
+
+
+def create_work(start_idx: int, end_idx: int,
+                path: str | os.PathLike | bytes, valid_ids: list[str],
+                question_distribution: dict[int, list[int, int, int]], all_users: list[User],
+                is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
+                thread_name: int, max_thread: int) -> tuple[list[User], dict[int, list[int, int, int]]]:
+    """responsible to distribute work. Work is assign to each core(?) by taking the number of file and dividing them
+    equally among max_thread. Remaining files are assigned to last worker. See calculate_start_end_idxs"""
     path_to_models = os.getcwd()
     loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
     loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+
     max_num = len(os.listdir(path))
     for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
         current_idx = user_index + (max_num // max_thread) * thread_name
         print(f"[Thread: {thread_name}] {current_idx} of {end_idx}. {end_idx - current_idx} To do")
         abs_img_path = os.path.join(path, file_name)
-        all_users, how_many_people_got_a_question_right_dict = evaluator(abs_img_path, valid_ids,
-                                                                         how_many_people_got_a_question_right_dict,
-                                                                         all_users,
-                                                                         is_60_question_form, debug,
-                                                                         is_barcode_ean13,
-                                                                         loaded_svm_classifier, loaded_knn_classifier)
-    return all_users, how_many_people_got_a_question_right_dict
+        all_users, question_distribution = evaluator(abs_img_path, valid_ids,
+                                                     question_distribution,
+                                                     all_users,
+                                                     is_50_question_sim, debug,
+                                                     is_barcode_ean13,
+                                                     loaded_svm_classifier, loaded_knn_classifier)
+    return all_users, question_distribution
 
 
-def calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread):
-    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
-    start_end_idxs[-1] = numero_di_presenti_effettivi
-    return start_end_idxs
-
-
-def dispatch_multithread(path, numero_di_presenti_effettivi, valid_ids,
-                         how_many_people_got_a_question_right_dict,
-                         all_users,
-                         is_60_question_form, debug,
-                         is_barcode_ean13, max_thread=7):
+def dispatch_multithread(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
+                         valid_ids: list[str], question_distribution: dict[int, list[int, int, int]],
+                         all_users: list[User], is_50_question_sim: int | bool, debug: str,
+                         is_barcode_ean13: int | bool, max_thread: int = 7) \
+        -> tuple[list[User], dict[int, list[int, int, int]]]:
+    """create the thread obj, start them, wait for them to finish and returns the evaluated relevant obj"""
     thread_list = []
     cargo = [path, valid_ids,
-             how_many_people_got_a_question_right_dict, all_users,
-             is_60_question_form, debug, is_barcode_ean13]
+             question_distribution, all_users,
+             is_50_question_sim, debug, is_barcode_ean13]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread)
     print(start_end_idxs)
     for thread_idx in range(max_thread):
@@ -488,4 +525,4 @@ def dispatch_multithread(path, numero_di_presenti_effettivi, valid_ids,
     for thread in thread_list:
         thread.join()
 
-    return all_users, how_many_people_got_a_question_right_dict
+    return all_users, question_distribution
