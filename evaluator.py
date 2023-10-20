@@ -39,14 +39,14 @@ class Utils:
     CLASSIFIER_IMG_DIM = 18
 
     LETTERS: Tuple[str, ...] = ("L", "", "A", "B", "C", "D", "E")
-    SQUARE_CODE_TO_IDX = {
+    EVAL_CODE_TO_IDX = {
         "QB": 0,
         "QS": 1,
         "QA": 2,
         "CB": 3,
         "CA": 4
     }
-    IDX_TO_SQUARE_CODE = {
+    IDX_TO_EVAL_CODE = {
         0: "QB",
         1: "QS",
         2: "QA",
@@ -71,8 +71,8 @@ def from_col_to_row(col: np.ndarray) -> np.ndarray:
     return col.reshape((1, col.shape[0]))
 
 
-def find_n_black_point_on_row(one_d_sliced, bool_threshold: int = 165):
-    """refactor may be needed"""
+def find_n_black_point_on_row(one_d_sliced: np.ndarray, bool_threshold: int = 165) -> list[int]:
+    """refactor may be needed. Check TI_canny_find_n_black_point_on_row and TI_canny_find_n_black_point_on_col"""
     bool_arr: np.ndarray = (one_d_sliced < bool_threshold)[0]
 
     positions = np.where(bool_arr == 1)[0]
@@ -86,7 +86,33 @@ def find_n_black_point_on_row(one_d_sliced, bool_threshold: int = 165):
     return out
 
 
-def get_top_corner(gr_image, x_start_pos, direction):
+def TI_canny_find_n_black_point_on_row(BGR_SCW_img: np.ndarray, cols_pos_sample_point_y: int) -> list[int]:
+    """optimized version of find_n_black_point_on_row but currently not know if it works"""
+    gray_img = cv2.cvtColor(BGR_SCW_img, cv2.COLOR_BGR2GRAY)
+    canny = cv2.Canny(gray_img, 100, 200)
+    one_d_slice = one_d_row_slice(canny, cols_pos_sample_point_y)
+    edges_pos = np.where(one_d_slice > 150)[-1]
+    out = [edges_pos[i - 1] + 3 for i in range(1, len(edges_pos)) if edges_pos[i] - edges_pos[i - 1] > 5]
+    out.append(edges_pos[-1])
+    return out
+
+
+def TI_canny_find_n_black_point_on_col(BGR_SCW_img: np.ndarray, row_pos_sample_point_x: int) -> list[int]:
+    """as TI_canny_find_n_black_point_on_row but for finding black points on col"""
+    gray_img = cv2.cvtColor(BGR_SCW_img, cv2.COLOR_BGR2GRAY)
+    canny = cv2.Canny(gray_img, 100, 200)
+    one_d_slice = one_d_col_slice(canny, row_pos_sample_point_x)
+    # should we cast with from_col_to_row?
+    edges_pos = np.where(one_d_slice > 150)[-1]
+    out = [edges_pos[i - 1] + 3 for i in range(1, len(edges_pos)) if edges_pos[i] - edges_pos[i - 1] > 5]
+    out.append(edges_pos[-1])
+    return out
+
+
+def get_top_corner(gr_image: np.ndarray, x_start_pos: int, direction: int) -> tuple[int, int]:
+    """calculate the x;y position of the top corners. The idea behind the algorithm is to start at the middle of the
+    image and walk all the way towards the edge of the image. Ones a corner is reached, the jump of the value of y is
+    going to be big enough that it will be caught by the while loop. Direction > 0 means towards the right side"""
     one_d_sliced: np.ndarray = from_col_to_row(one_d_col_slice(gr_image, x_start_pos))
 
     first = find_n_black_point_on_row(one_d_sliced)[0]
@@ -105,7 +131,9 @@ def get_top_corner(gr_image, x_start_pos, direction):
     return x, y
 
 
-def get_bottom_corner(gr_image, TL_x):
+def get_bottom_corner(gr_image: np.ndarray, TL_x: int) -> tuple[int, int]:
+    """currently estimating BL corner to be somewhat close (x-wise) to TL. A proper implementation of get_bottom_corner
+    may be needed"""
     # fix this
     last_left_side_point_y = find_n_black_point_on_row(from_col_to_row(one_d_col_slice(gr_image, TL_x)))[-1]
     last_left_side_point_x = find_n_black_point_on_row(one_d_row_slice(gr_image, last_left_side_point_y - 2))[0]
@@ -113,7 +141,8 @@ def get_bottom_corner(gr_image, TL_x):
     return last_left_side_point_x, last_left_side_point_y
 
 
-def get_question_box_y_vals(gr_image, TL_x):
+def get_question_box_y_vals(gr_image: np.ndarray, TL_x: int) -> tuple[int, int]:
+    """grab the left side y value of the black bars that indicates the starting and ending value of the question box"""
     left_side_y_vals = find_n_black_point_on_row(from_col_to_row(one_d_col_slice(gr_image, TL_x)))
     begin_question_box_y = left_side_y_vals[0]
     end_question_box_y = left_side_y_vals[1]
@@ -125,6 +154,9 @@ def transform_point_with_matrix(y, matrix):
 
 
 def get_x_cuts(cols_x_pos: List[int]) -> List[int]:
+    """given the position of each column (cols_x_pos), calculate the position of all the inner cuts so that each slice
+    contains only a col of circles, numbers or squares. A more flexible approach could be use if a new version of
+    the question templates gets released"""
     x_cut_positions: List[int] = []
     for i_begin_col_x in range(len(cols_x_pos) - 1):
         col_width: int = cols_x_pos[i_begin_col_x + 1] - cols_x_pos[i_begin_col_x] - Utils.X_COL_SHIFT
@@ -135,14 +167,17 @@ def get_x_cuts(cols_x_pos: List[int]) -> List[int]:
 
 
 def get_y_cuts(begin_question_box_y: int, end_question_box_y: int) -> Tuple[int]:
+    """as for get_x_cuts but row-wise"""
     # IDK why but +1 works
-    # Utils.Y_ROW_SHIFT gives better squares for the lowest (bottomest? lol) rows
+    # Utils.Y_ROW_SHIFT gives better squares for the lowest rows
     square_height = ((end_question_box_y - begin_question_box_y) // 15) + 1
     return tuple(
         y - Utils.Y_ROW_SHIFT for y in range(begin_question_box_y, end_question_box_y + square_height, square_height))
 
 
 def build_masks(size, tolerance):
+    """creates a [0, 255] binary mask with max vals on the diagonal. Tolerance roughly transpose to the width of the
+    diagonal"""
     zeros = np.zeros((size, size), dtype=np.uint8)
     for j in range(size):
         for i in range(size):
@@ -154,14 +189,18 @@ def build_masks(size, tolerance):
 
 
 def cast_square_to_circle(predicted_category_from_cls):
-    if predicted_category_from_cls == Utils.SQUARE_CODE_TO_IDX["QB"]:
-        return Utils.SQUARE_CODE_TO_IDX["CB"]
-    elif predicted_category_from_cls in (Utils.SQUARE_CODE_TO_IDX["QA"], Utils.SQUARE_CODE_TO_IDX["QS"]):
-        return Utils.SQUARE_CODE_TO_IDX["CA"]
+    """knn_cls and svm_cls are not able to differentiate between squares and circles, cast any square prediction to the
+    circle. This can safely be done since circles and squares are placed in constantly invariant position"""
+    if predicted_category_from_cls == Utils.EVAL_CODE_TO_IDX["QB"]:
+        return Utils.EVAL_CODE_TO_IDX["CB"]
+    elif predicted_category_from_cls in (Utils.EVAL_CODE_TO_IDX["QA"], Utils.EVAL_CODE_TO_IDX["QS"]):
+        return Utils.EVAL_CODE_TO_IDX["CA"]
 
 
-def evaluate_square(cropped_to_bound, x_index,
-                    svm_classifier, knn_classifier):
+def evaluate_square(cropped_to_bound, x_index, svm_classifier, knn_classifier):
+    """given the extracted image containing only a square/circle, evaluate its corresponding tag based on
+    Utils.IDX_TO_EVAL_CODE """
+
     crop_for_old_eval = cv2.resize(cropped_to_bound, (12, 12))
     manual_pred, average, count = old_evaluate_square(crop_for_old_eval, x_index)
     crop_for_prediction = cropped_to_bound.flatten()
@@ -177,19 +216,17 @@ def evaluate_square(cropped_to_bound, x_index,
         return knn_pred  # if they agree, return one of them
     else:
         if x_index % 7 == 0:
-            # todo: for no known reason, the cropped version of some circle is awful and this is ruining cls-based pred
+            # todo: for no known reason, the cropped version of some circle is blurred and this is ruining cls-based pred
             # todo: maybe is due to the sheet architecture and inconsistent spacing between cols. Consider rebuild
             return manual_pred
+        # if they disagree, choose the most voted option
         chosen_pred = Counter([svm_pred, knn_pred, manual_pred]).most_common(1)[0][0]
-        # print(f"[{question_number}:{question_letter}] > {Utils.IDX_TO_SQUARE_CODE.get(chosen_pred)} Has been chosen because of: \n"
-        #       f"    svm_pred: {Utils.IDX_TO_SQUARE_CODE.get(svm_pred)}\n"
-        #       f"    knn_pred: {Utils.IDX_TO_SQUARE_CODE.get(knn_pred)}\n"
-        #       f"    manual_pred: {Utils.IDX_TO_SQUARE_CODE.get(manual_pred)} with {average = } and {count = }"
-        #       )
         return chosen_pred
 
 
 def old_evaluate_square(crop_for_eval, x_index) -> tuple[int, float, int | None]:
+    """latest iteration of the old generation of evaluators. Its rationale is 'given a square, compute a weighted
+    average over the pixel in the crop giving max value to those black pixel along the diagonals'"""
     mask = build_masks(12, 2)
     scaled_crop = 2 * ((crop_for_eval / 255) - 0.5)
     mult = scaled_crop * mask
@@ -201,23 +238,20 @@ def old_evaluate_square(crop_for_eval, x_index) -> tuple[int, float, int | None]
     if x_index % 7:
         # square
         if average > 0.33:
-            return 0, average, None  # QB
+            return Utils.EVAL_CODE_TO_IDX.get("QB"), average, None  # QB
         else:
             count = int(np.sum(np.where(crop_for_eval[2:10] > 125)))
             if count > 100:
-                # QS
-                return 1, average, count
+                return Utils.EVAL_CODE_TO_IDX.get("QS"), average, count
             else:
-                # QA
-                return 2, average, count
+                return Utils.EVAL_CODE_TO_IDX.get("QA"), average, count
     else:
         # circle
+        # todo 0.1 is still a precarious value. Consider modifying it during first sim
         if average > 0.1:
-            # CB
-            return 3, average, None
+            return Utils.EVAL_CODE_TO_IDX.get("CB"), average, None
         else:
-            # CA
-            return 4, average, None
+            return Utils.EVAL_CODE_TO_IDX.get("CA"), average, None
 
 
 def apply_grid(bgr_scw_img,
