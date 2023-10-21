@@ -73,7 +73,7 @@ This is what how OpticReader evaluate the sample input exam sheet. The green squ
 ![sample_output.png](screenshots%2Fsample_output.png)
 
 ## Setup
-Check the [Technologies Used](#Technologies Used) section for requirements. Microsoft Excel is necessary for opening the rankings file at the end of the app execution.
+Check the [Technologies Used](#technologies-used) section for requirements. Microsoft Excel is necessary for opening the rankings file at the end of the app execution.
 After you have cloned this repository be sure to run BarCodeCreatorPdfMerger.py in order to convert the Base template to a "750 pages single pdf" where each page is an exam sheet with its own barcode.
 
 
