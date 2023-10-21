@@ -114,7 +114,3 @@ Many thanks to "Studenti e prof Uniti per" association's directors, in particula
 
 ## Contact
 Created by [Lorenzo Paolin](https://github.com/lorenzopol). If you have any request, doubt, or you need to contact me, feel free to open an Issue [*here*](https://github.com/lorenzopol/OpticReader-v7.0). 
-
-
-<!-- ## License -->
-<!-- This project is open source and available under the [... License](). -->
