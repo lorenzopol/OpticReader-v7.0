@@ -1,6 +1,5 @@
 # OpticReader v7.0
 > Welcome to the seventh iteration of my attempt to write an OMR from scratch.
-> Live demo [_here_](https://www.example.com). <!-- If you have the project hosted somewhere, include the link here. -->
 
 ## Table of Contents
 * [General Info](#general-information)
