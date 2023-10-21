@@ -1,9 +1,9 @@
 import dearpygui.dearpygui as dpg
-
 from evaluator import create_work, dispatch_multithread
 import custom_utils as cu
 import os
 import xlsxwriter
+
 
 
 class DpgExt:
@@ -81,7 +81,7 @@ class DpgExt:
                 1, 1)
         ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
         for user in all_users:
-            user.score = round(user.score + ceq)
+            user.score = round((user.score + ceq), 2)
         sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
         for placement, user in enumerate(sorted_by_score_user_list):
             cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_50_question_sim)
@@ -268,7 +268,7 @@ def run_with_profiling():
     all_users, question_distribution = dispatch_multithread(
             prof_path, prof_nof_pres_eff, prof_valid_ids,
             prof_question_distribution,
-            prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13, max_thread)
+            prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
 
 
 if __name__ == '__main__':

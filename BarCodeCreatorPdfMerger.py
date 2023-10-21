@@ -4,6 +4,7 @@ import cv2
 import os
 from PIL import Image
 from pyzbar.pyzbar import decode
+import time
 
 
 def build_sheets(path, nof_sheets):
@@ -61,6 +62,7 @@ def decode_whole_dir(path_to_images):
 
 if __name__ == "__main__":
     print("DANGER: RUN FROM TERMINAL NOT FROM PYCHARM")
-    build_sheets(os.path.join(os.getcwd(), "reduced_res_50QUES.png"), 750)
-    # merge_to_one_pdf(os.path.join(os.getcwd(), "blank_barcoded_tests"))
-    decode_whole_dir(os.path.join(os.getcwd(), "blank_barcoded_tests"))
+    build_sheets(os.path.join(os.getcwd(), "screenshots/reduced_res_50QUES.png"), 750)
+    time.sleep(3)
+    merge_to_one_pdf(os.path.join(os.getcwd(), "blank_barcoded_tests"))
+    # decode_whole_dir(os.path.join(os.getcwd(), "blank_barcoded_tests"))
