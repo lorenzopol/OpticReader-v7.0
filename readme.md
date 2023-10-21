@@ -69,7 +69,7 @@ Some helper screenshots for those who are unfamiliar with the exam sheet layout 
 This is what a correctly filled form could look like after being scanned. 
 ![sample_input.jpg](screenshots%2Fsample_input.jpg) 
 ### Sample output
-This is what how OpticReader evaluate the sample input exam sheet. The green square means that the selected option has been evaluated as chosen.    
+This is how OpticReader evaluate the sample input exam sheet. The green square means that the selected option has been evaluated as chosen.    
 ![sample_output.png](screenshots%2Fsample_output.png)
 
 ## Setup
