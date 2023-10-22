@@ -40,7 +40,7 @@ simulations.
 
 ## Assumptions
 As far as **filling the exam sheet** goes this were the latest rules given:
-- an X on a square means that the selected option (A to E) as been chosen for a given question
+- an X on a square means that the selected option (A to E) has been chosen for a given question
 - a blank square should be ignored
 - a fully darkened square means that the selected option should be ignored (as for blank squares)
 - a marked circle (either darkened or marked with an X) means that whatever was chosen in the corresponding square should be ignored
@@ -69,7 +69,7 @@ Some helper screenshots for those who are unfamiliar with the exam sheet layout 
 This is what a correctly filled form could look like after being scanned. 
 ![sample_input.jpg](screenshots%2Fsample_input.jpg) 
 ### Sample output
-This is what how OpticReader evaluate the sample input exam sheet. The green square means that the selected option has been evaluated as chosen.    
+This is how OpticReader evaluate the sample input exam sheet. The green square means that the selected option has been evaluated as chosen.    
 ![sample_output.png](screenshots%2Fsample_output.png)
 
 ## Setup
