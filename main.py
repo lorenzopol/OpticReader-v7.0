@@ -1,5 +1,5 @@
 import dearpygui.dearpygui as dpg
-from evaluator import create_work, dispatch_multithread
+from evaluator import create_work, dispatch_multiprocess
 import custom_utils as cu
 import os
 import xlsxwriter
@@ -63,7 +63,7 @@ class DpgExt:
         placement = 0
         numero_di_presenti_effettivi = len(os.listdir(path))
         if is_multithread:
-            all_users, question_distribution = dispatch_multithread(
+            all_users, question_distribution = dispatch_multiprocess(
                 path,
                 numero_di_presenti_effettivi,
                 valid_ids,
@@ -265,14 +265,14 @@ def run_with_profiling():
     prof_debug = "No"
     prof_is_barcode_ean13 = True
 
-    all_users, question_distribution = dispatch_multithread(
+    all_users, question_distribution = dispatch_multiprocess(
             prof_path, prof_nof_pres_eff, prof_valid_ids,
             prof_question_distribution,
             prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
 
 
 if __name__ == '__main__':
-    def_run = int(input("Choose running option\n 1. Default \n 2. Profiling \n >> "))
+    def_run = 2
     if def_run == 1:
         main()
     else:

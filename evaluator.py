@@ -1,4 +1,4 @@
-import threading
+import multiprocessing
 
 import imutils
 
@@ -463,11 +463,11 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     return all_users, question_distribution
 
 
-def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_thread: int) -> list[int]:
-    """given the max number of thread, calculates how many files each worker has to evaluate.
-    If numero_di_presenti_effettivi is not divisible by max_thread, remaning work is assigned to last worker"""
-    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_thread))
-    if len(start_end_idxs) == max_thread:
+def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int) -> list[int]:
+    """given the max number of process, calculates how many files each worker has to evaluate.
+    If numero_di_presenti_effettivi is not divisible by max_process, remaning work is assigned to last worker"""
+    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_process))
+    if len(start_end_idxs) == max_process:
         start_end_idxs.append(numero_di_presenti_effettivi)
     else:
         start_end_idxs[-1] = numero_di_presenti_effettivi
@@ -480,17 +480,17 @@ def create_work(start_idx: int, end_idx: int,
                 path: str | os.PathLike | bytes, valid_ids: list[str],
                 question_distribution: dict[int, list[int, int, int]], all_users: list[User],
                 is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
-                thread_name: int, max_thread: int) -> tuple[list[User], dict[int, list[int, int, int]]]:
+                process_name: int, max_process: int) -> tuple[list[User], dict[int, list[int, int, int]]]:
     """responsible to distribute work. Work is assign to each core(?) by taking the number of file and dividing them
-    equally among max_thread. Remaining files are assigned to last worker. See calculate_start_end_idxs"""
+    equally among max_process. Remaining files are assigned to last worker. See calculate_start_end_idxs"""
     path_to_models = os.getcwd()
     loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
     loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
 
     max_num = len(os.listdir(path))
     for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
-        current_idx = user_index + (max_num // max_thread) * thread_name
-        print(f"[Thread: {thread_name}] {current_idx} of {end_idx}. {end_idx - current_idx} To do")
+        current_idx = user_index + (max_num // max_process) * process_name
+        # print(f"[process: {process_name}] {current_idx} of {end_idx}. {end_idx - current_idx} To do")
         abs_img_path = os.path.join(path, file_name)
         all_users, question_distribution = evaluator(abs_img_path, valid_ids,
                                                      question_distribution,
@@ -501,27 +501,28 @@ def create_work(start_idx: int, end_idx: int,
     return all_users, question_distribution
 
 
-def dispatch_multithread(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
-                         valid_ids: list[str], question_distribution: dict[int, list[int, int, int]],
-                         all_users: list[User], is_50_question_sim: int | bool, debug: str,
-                         is_barcode_ean13: int | bool, max_thread: int = 7) \
+def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
+                          valid_ids: list[str], question_distribution: dict[int, list[int, int, int]],
+                          all_users: list[User], is_50_question_sim: int | bool, debug: str,
+                          is_barcode_ean13: int | bool, max_process: int = 7) \
         -> tuple[list[User], dict[int, list[int, int, int]]]:
-    """create the thread obj, start them, wait for them to finish and returns the evaluated relevant obj"""
-    thread_list = []
+    """create the process obj, start them, wait for them to finish and returns the evaluated relevant obj"""
+    process_list = []
     cargo = [path, valid_ids,
              question_distribution, all_users,
              is_50_question_sim, debug, is_barcode_ean13]
-    start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_thread)
+    start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     print(start_end_idxs)
-    for thread_idx in range(max_thread):
-        thread = threading.Thread(target=create_work, args=(start_end_idxs[thread_idx], start_end_idxs[thread_idx + 1],
-                                                            *cargo, thread_idx, max_thread))
-        thread_list.append(thread)
+    for process_idx in range(max_process):
+        process = multiprocessing.Process(target=create_work,
+                                          args=(start_end_idxs[process_idx], start_end_idxs[process_idx + 1],
+                                                *cargo, process_idx, max_process))
+        process_list.append(process)
 
-    for thread in thread_list:
-        thread.start()
+    for process in process_list:
+        process.start()
 
-    for thread in thread_list:
-        thread.join()
+    for process in process_list:
+        process.join()
 
     return all_users, question_distribution
