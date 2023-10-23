@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 
 import imutils
 
@@ -369,9 +370,8 @@ def calculate_single_sub_score(score_list):
             sum(risultati_matematicaLogica), sum(risultati_Cultura)]
 
 
-def generate_score_list(user_answer_dict: Dict[int, str],
-                        question_distribution: dict[int, list[int, int, int]]) \
-        -> tuple[list[float], dict[int, list[int, int, int]]]:
+def generate_score_list(user_answer_dict: Dict[int, str]) \
+        -> list[float]:
     """given the answer that a user has submitted, calculate if they are right or not and assign it
     corresponding score"""
     correct_answers: list = cu.retrieve_or_display_answers()
@@ -390,24 +390,38 @@ def generate_score_list(user_answer_dict: Dict[int, str],
         if not user_letter:
             # no given answer
             score_list.append(0)
-            # add that this person did not answer this question
-            question_distribution[i][1] += 1
+
         else:
             if user_letter in letter:
                 # check if the given letter is IN the corrected letters (no "==" since, by mistake, more options
                 # could be correct)
                 score_list.append(1)
-
-                # add that this person got the i-th question correct
-                question_distribution[i][0] += 1
             else:
                 score_list.append(-0.25)
-
-                # add that this person got the i-th question wrong
-                question_distribution[i][2] += 1
-    return score_list, question_distribution
+    return score_list
 
 
+def get_question_distribution_from_user_list(all_users: list[User], is_50_question_sim)\
+        -> dict[int, list[int, int, int]]:
+    question_distribution = {i: [0, 0, 0] for i in range(50 - 10 * int(not is_50_question_sim))}
+
+    correct_answers: list = cu.retrieve_or_display_answers()
+    for user in all_users:
+        for i in range(len(user.sorted_user_answer_dict)):
+            pre = correct_answers[i].split(";")
+            number, letter = pre[0].split(" ")
+            user_letter = user.sorted_user_answer_dict[i + 1]
+            if not user_letter:
+                # add that this person did not answer this question
+                question_distribution[i][1] += 1
+            else:
+                if user_letter in letter:
+                    # add that this person got the i-th question correct
+                    question_distribution[i][0] += 1
+                else:
+                    # add that this person got the i-th question wrong
+                    question_distribution[i][2] += 1
+    return question_distribution
 def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
     """warp affine the scaled image to straight the question box and make it fit full width"""
     gr_SC_img: np.array = cv2.cvtColor(BGR_SC_img, cv2.COLOR_BGR2GRAY)
@@ -431,10 +445,9 @@ def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
 
 
 def evaluator(abs_img_path: str | os.PathLike | bytes,
-              valid_ids: list[str], question_distribution: dict[int, list[int, int, int]],
-              all_users: list[User], is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
-              loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier) \
-        -> tuple[list[User], dict[int, list[int, int, int]]]:
+              valid_ids: list[str], is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
+              loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier, idx: int|None = None) \
+        -> User:
     """entry point of application. Responsible for:
         - reading the image,
         - evaluate barcode value,
@@ -453,14 +466,13 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
                                       loaded_svm_classifier, loaded_knn_classifier)
 
     # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
-    score_list, question_distribution = generate_score_list(
-        user_answer_dict, question_distribution)
+    score_list = generate_score_list(
+        user_answer_dict)
     per_sub_score = calculate_single_sub_score(score_list) if is_50_question_sim else []
 
     # create user
     user = User(cropped_bar_code_id, sum(score_list), per_sub_score, score_list, user_answer_dict)
-    all_users.append(user)
-    return all_users, question_distribution
+    return user
 
 
 def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int) -> list[int]:
@@ -476,53 +488,21 @@ def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int
     return start_end_idxs
 
 
-def create_work(start_idx: int, end_idx: int,
-                path: str | os.PathLike | bytes, valid_ids: list[str],
-                question_distribution: dict[int, list[int, int, int]], all_users: list[User],
-                is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
-                process_name: int, max_process: int) -> tuple[list[User], dict[int, list[int, int, int]]]:
-    """responsible to distribute work. Work is assign to each core(?) by taking the number of file and dividing them
-    equally among max_process. Remaining files are assigned to last worker. See calculate_start_end_idxs"""
-    path_to_models = os.getcwd()
-    loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
-    loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
-
-    max_num = len(os.listdir(path))
-    for user_index, file_name in enumerate(os.listdir(path)[start_idx:end_idx]):
-        current_idx = user_index + (max_num // max_process) * process_name
-        # print(f"[process: {process_name}] {current_idx} of {end_idx}. {end_idx - current_idx} To do")
-        abs_img_path = os.path.join(path, file_name)
-        all_users, question_distribution = evaluator(abs_img_path, valid_ids,
-                                                     question_distribution,
-                                                     all_users,
-                                                     is_50_question_sim, debug,
-                                                     is_barcode_ean13,
-                                                     loaded_svm_classifier, loaded_knn_classifier)
-    return all_users, question_distribution
-
-
 def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
-                          valid_ids: list[str], question_distribution: dict[int, list[int, int, int]],
-                          all_users: list[User], is_50_question_sim: int | bool, debug: str,
+                          valid_ids: list[str], is_50_question_sim: int | bool, debug: str,
                           is_barcode_ean13: int | bool, max_process: int = 7) \
         -> tuple[list[User], dict[int, list[int, int, int]]]:
     """create the process obj, start them, wait for them to finish and returns the evaluated relevant obj"""
-    process_list = []
-    cargo = [path, valid_ids,
-             question_distribution, all_users,
-             is_50_question_sim, debug, is_barcode_ean13]
+    path_to_models = os.getcwd()
+    loaded_svm_classifier: SVC = load_model(os.path.join(path_to_models, "svm_model"))
+    loaded_knn_classifier: KNeighborsClassifier = load_model(os.path.join(path_to_models, "knn_model"))
+
+    cargo = [[os.path.join(path, file_name), valid_ids,
+              is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for idx, file_name in enumerate(os.listdir(path))]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     print(start_end_idxs)
-    for process_idx in range(max_process):
-        process = multiprocessing.Process(target=create_work,
-                                          args=(start_end_idxs[process_idx], start_end_idxs[process_idx + 1],
-                                                *cargo, process_idx, max_process))
-        process_list.append(process)
+    with multiprocessing.Pool(processes=max_process) as pool:
+        all_users: list[User] = pool.starmap(evaluator, cargo)
 
-    for process in process_list:
-        process.start()
-
-    for process in process_list:
-        process.join()
-
+    question_distribution = get_question_distribution_from_user_list(all_users, is_50_question_sim)
     return all_users, question_distribution

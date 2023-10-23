@@ -1,9 +1,9 @@
 import dearpygui.dearpygui as dpg
-from evaluator import create_work, dispatch_multiprocess
+from evaluator import dispatch_multiprocess, evaluator
 import custom_utils as cu
 import os
 import xlsxwriter
-
+from classifiers import load_model
 
 
 class DpgExt:
@@ -55,48 +55,50 @@ class DpgExt:
         valid_ids = [f"{i:03}" for i in range(max_number_of_tests)] if is_barcode_ean13 else \
             [f"{i:04}" for i in range(1000)]
 
-        question_distribution = {i: [0, 0, 0] for i in range(50 - 10 * int(not is_50_question_sim))}
-        all_users = []
         workbook = xlsxwriter.Workbook("graduatorie/excel_graduatorie.xlsx")
         workbook.add_worksheet()
 
         placement = 0
         numero_di_presenti_effettivi = len(os.listdir(path))
+        all_users = None
+        question_distribution = None
         if is_multithread:
             all_users, question_distribution = dispatch_multiprocess(
                 path,
                 numero_di_presenti_effettivi,
                 valid_ids,
-                question_distribution,
-                all_users,
                 is_50_question_sim, debug,
                 is_barcode_ean13)
         else:
-            all_users, question_distribution = create_work(
-                0, numero_di_presenti_effettivi,
-                path, valid_ids,
-                question_distribution,
-                all_users, is_50_question_sim,
-                debug, is_barcode_ean13,
-                1, 1)
-        print(all_users)
-        ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
-        for user in all_users:
-            user.score = round((user.score + ceq), 2)
-        sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
-        for placement, user in enumerate(sorted_by_score_user_list):
-            cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_50_question_sim)
+            path_to_models = os.getcwd()
+            loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
+            loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+            for filename in os.listdir(path):
+                all_users, question_distribution = evaluator(
+                    os.path.join(path, filename), valid_ids,
+                    is_50_question_sim,
+                    debug, is_barcode_ean13,
+                    loaded_svm_classifier, loaded_knn_classifier)
+        if question_distribution is not None and all_users is not None:
+            ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
+            for user in all_users:
+                user.score = round((user.score + ceq), 2)
+            sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
+            for placement, user in enumerate(sorted_by_score_user_list):
+                cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_50_question_sim)
 
-        worksheet = workbook.worksheets()[0]
-        for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
-            nof_correct, nof_not_given, nof_wrong = people_who_got_correct_not_given_and_wrong_answ
-            worksheet.write(3, 3 + col, f"{round(nof_correct / (placement + 1) * 100)}%",
-                            workbook.add_format({'bold': 1,
-                                                 'border': 1,
-                                                 'align': 'center',
-                                                 'valign': 'vcenter'})
-                            )
-        workbook.close()
+            worksheet = workbook.worksheets()[0]
+            for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
+                nof_correct, nof_not_given, nof_wrong = people_who_got_correct_not_given_and_wrong_answ
+                worksheet.write(3, 3 + col, f"{round(nof_correct / (placement + 1) * 100)}%",
+                                workbook.add_format({'bold': 1,
+                                                     'border': 1,
+                                                     'align': 'center',
+                                                     'valign': 'vcenter'})
+                                )
+            workbook.close()
+        else:
+            exit("CRITICAL ERROR")
 
         DpgExt.exit_launch("", "", "")
         dpg.show_item("EX")
@@ -260,16 +262,13 @@ def run_with_profiling():
     prof_path = r"E:\luglio"
     prof_nof_pres_eff = len(os.listdir(prof_path))
     prof_valid_ids = [f"{i:03}" for i in range(1000)]
-    prof_all_users = []
     prof_is_50_question_sim = True
-    prof_question_distribution = {i: [0, 0, 0] for i in range(50 - 10 * int(not prof_is_50_question_sim))}
     prof_debug = "No"
     prof_is_barcode_ean13 = True
 
     all_users, question_distribution = dispatch_multiprocess(
             prof_path, prof_nof_pres_eff, prof_valid_ids,
-            prof_question_distribution,
-            prof_all_users, prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
+            prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
 
 
 if __name__ == '__main__':
