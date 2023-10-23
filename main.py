@@ -79,6 +79,7 @@ class DpgExt:
                 all_users, is_50_question_sim,
                 debug, is_barcode_ean13,
                 1, 1)
+        print(all_users)
         ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
         for user in all_users:
             user.score = round((user.score + ceq), 2)
@@ -272,7 +273,7 @@ def run_with_profiling():
 
 
 if __name__ == '__main__':
-    def_run = 2
+    def_run = int(input("Choose running option\n 1. Default\n 2. Profiling \n >> "))
     if def_run == 1:
         main()
     else:
