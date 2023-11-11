@@ -43,7 +43,6 @@ class DpgExt:
 
     @staticmethod
     def confirm_launch(sender, app_data, user_data):
-        print("RESULT NOT NORMALIZED, TO BE IMPLEMENTED FROM try.py")
         path = dpg.get_value("pathToScan")
         dpg.show_item("progress")
 
@@ -96,6 +95,43 @@ class DpgExt:
                                                      'align': 'center',
                                                      'valign': 'vcenter'})
                                 )
+            stats_keys_format = workbook.add_format({'border': 1,
+                                                     "bold": 1,
+                                                     'align': 'center',
+                                                     'valign': 'vcenter', })
+
+            stats_value_format = workbook.add_format({'border': 1,
+                                                      'align': 'center',
+                                                      'valign': 'vcenter', })
+            # stats_dump
+            # =INDICE($A$5:$A$14; CONFRONTA(MIN(ASS($C$5:$C$14-C20)); ASS($C$5:$C$14-C20); 0))
+            formula_range = f"$C$5:$C${placement + 4 + 1}"
+            worksheet.write(placement + 5 + 1, 1, "Media", stats_keys_format)
+            worksheet.write_formula(placement + 5 + 1, 2, f"=_xlfn.AVERAGE({formula_range})", stats_value_format)
+            worksheet.write_formula(placement + 5 + 1, 3,
+                                    f"=_xlfn.INDEX($A$5:$A${placement+4+1}, _xlfn.MATCH(_xlfn.MIN(_xlfn.ABS({formula_range}-C{placement + 5 + 2})), _xlfn.ABS({formula_range}-C{placement + 5 + 2}), 0))",
+                                    stats_value_format)
+
+            worksheet.write(placement + 6 + 1, 1, "Mediana", stats_keys_format)
+            worksheet.write_formula(placement + 6 + 1, 2, f"=_xlfn.MEDIAN({formula_range})", stats_value_format)
+
+            # worksheet.write(placement + 7 + 1, 1, "Moda", stats_keys_format)
+            # worksheet.write_formula(placement + 7 + 1, 2, f"=_xlfn.MODE({formula_range})", stats_value_format)
+
+            worksheet.write(placement + 8 + 1, 1, "Massimo", stats_keys_format)
+            worksheet.write_formula(placement + 8 + 1, 2, f"=_xlfn.MAX({formula_range})", stats_value_format)
+
+            worksheet.write(placement + 9 + 1, 1, "Minimo", stats_keys_format)
+            worksheet.write_formula(placement + 9 + 1, 2, f"=_xlfn.MIN({formula_range})", stats_value_format)
+
+            worksheet.write(placement + 5 + 1, 5, "Q1", stats_keys_format)
+            worksheet.write_formula(placement + 5 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 1)", stats_value_format)
+
+            worksheet.write(placement + 6 + 1, 5, "Q2", stats_keys_format)
+            worksheet.write_formula(placement + 6 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 2)", stats_value_format)
+
+            worksheet.write(placement + 7 + 1, 5, "Q3", stats_keys_format)
+            worksheet.write_formula(placement + 7 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 3)", stats_value_format)
             workbook.close()
         else:
             exit("CRITICAL ERROR")
@@ -267,8 +303,8 @@ def run_with_profiling():
     prof_is_barcode_ean13 = True
 
     all_users, question_distribution = dispatch_multiprocess(
-            prof_path, prof_nof_pres_eff, prof_valid_ids,
-            prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
+        prof_path, prof_nof_pres_eff, prof_valid_ids,
+        prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
 
 
 if __name__ == '__main__':

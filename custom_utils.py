@@ -81,7 +81,7 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
                                                                       'valign': 'vcenter'})
                           )
     # Create question number header
-    _0_header = [*range(1, 51-(10*int(not is_50_question_sim)))]
+    _0_header = [*range(1, 51 - (10 * int(not is_50_question_sim)))]
     for col_num, data in enumerate(_0_header):
         worksheet.write(0, col_num + 3, data, workbook.add_format({'border': 1,
                                                                    'align': 'center',
@@ -96,7 +96,7 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
                                                                            }))
     # Create correct answer header
     _1_header = [*[correct_answers[i].split(";")[0].split(" ")[1]
-                   for i in range(len(correct_answers[:50-(10*int(not is_50_question_sim))]))]]
+                   for i in range(len(correct_answers[:50 - (10 * int(not is_50_question_sim))]))]]
     for col_num, data in enumerate(_1_header):
         worksheet.write(1, col_num + 3, data, workbook.add_format({'border': 1,
                                                                    'align': 'center',
@@ -105,7 +105,7 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
                                                                    "bold": 1,
                                                                    "bg_color": "#4287F5"}))
     # for percentage mod *range(50)
-    _3_header = ["Posizione", "ID", "Punteggio", *[0] * 0*(50-(10*int(not is_50_question_sim)))]
+    _3_header = ["Posizione", "ID", "Punteggio", *[0] * 0 * (50 - (10 * int(not is_50_question_sim)))]
     for col_num, data in enumerate(_3_header):
         worksheet.write(3, col_num, data, workbook.add_format({'bold': 1,
                                                                'border': 1,
@@ -118,15 +118,15 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
     worksheet.write(f'B{placement + v_delta}', f'{user.index}', workbook.add_format({'border': 1,
                                                                                      'align': 'center',
                                                                                      'valign': 'vcenter', }))
-    worksheet.write(f'C{placement + v_delta}', f'{user.score}', workbook.add_format({'border': 1,
-                                                                                     'align': 'center',
-                                                                                     'valign': 'vcenter', }))
+    worksheet.write_number(f'C{placement + v_delta}', user.score, workbook.add_format({'border': 1,
+                                                                                       'align': 'center',
+                                                                                       'valign': 'vcenter', }))
 
     h_delta = 3
-    for number in range(h_delta, 50 + h_delta-(10*int(not is_50_question_sim))):
+    for number in range(h_delta, 50 + h_delta - (10 * int(not is_50_question_sim))):
         worksheet.write(placement + v_delta - 1, number,
                         f'{user.sorted_user_answer_dict[number + 1 - h_delta]}',
-                        formats[round(abs(user.score_list[number - h_delta])*2.4)])
+                        formats[round(abs(user.score_list[number - h_delta]) * 2.4)])
 
 
 def calculate_test_complexity_index(qst_distribution, nof_participant, max_score):
@@ -139,7 +139,7 @@ def calculate_test_complexity_index(qst_distribution, nof_participant, max_score
     cdf_list = []
     for _qst_number, array in qst_distribution.items():
         nof_correct, _nof_blank, nof_wrong = array
-        cdf = (nof_correct - 0.25*nof_wrong) / nof_participant
+        cdf = (nof_correct - 0.25 * nof_wrong) / nof_participant
         cdf_list.append(cdf)
     cdfp = sum(cdf_list)
     ceq = max_score - cdfp
