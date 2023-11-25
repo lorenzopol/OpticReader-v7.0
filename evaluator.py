@@ -17,8 +17,9 @@ class User:
     index: str = field(compare=False)
     score: float
     per_sub_score: list = field(repr=False)
-    score_list: list = field(compare=False, repr=False)
+    score_dict: dict = field(compare=False, repr=False)
     sorted_user_answer_dict: dict = field(compare=False, repr=False)
+    ceq: float = 0.0
 
 
 class Utils:
@@ -206,24 +207,27 @@ def evaluate_square(cropped_to_bound: np.ndarray, x_index: int,
     crop_for_old_eval = cv2.resize(cropped_to_bound, (12, 12))
     manual_pred, average, count = old_evaluate_square(crop_for_old_eval, x_index)
     crop_for_prediction = cropped_to_bound.flatten()
+    if svm_classifier is not None and knn_classifier is not None:
 
-    svm_pred = svm_classifier.predict([crop_for_prediction])[0]
-    knn_pred = knn_classifier.predict([crop_for_prediction])[0]
+        svm_pred = svm_classifier.predict([crop_for_prediction])[0]
+        knn_pred = knn_classifier.predict([crop_for_prediction])[0]
 
-    if x_index % 7 == 0:
-        svm_pred = cast_square_to_circle(svm_classifier.predict([crop_for_prediction])[0])
-        knn_pred = cast_square_to_circle(knn_classifier.predict([crop_for_prediction])[0])
-
-    if svm_pred == knn_pred == manual_pred:
-        return knn_pred  # if they agree, return one of them
-    else:
         if x_index % 7 == 0:
-            # todo: for no known reason, the cropped version of some circle is blurred and this is ruining cls-based pred
-            # todo: maybe is due to the sheet architecture and inconsistent spacing between cols. Consider rebuild
-            return manual_pred
-        # if they disagree, choose the most voted option
-        chosen_pred = Counter([svm_pred, knn_pred, manual_pred]).most_common(1)[0][0]
-        return chosen_pred
+            svm_pred = cast_square_to_circle(svm_classifier.predict([crop_for_prediction])[0])
+            knn_pred = cast_square_to_circle(knn_classifier.predict([crop_for_prediction])[0])
+
+        if svm_pred == knn_pred == manual_pred:
+            return knn_pred  # if they agree, return one of them
+        else:
+            if x_index % 7 == 0:
+                # todo: for no known reason, the cropped version of some circle is blurred and this is ruining cls-based pred
+                # todo: maybe is due to the sheet architecture and inconsistent spacing between cols. Consider rebuild
+                return manual_pred
+            # if they disagree, choose the most voted option
+            chosen_pred = Counter([svm_pred, knn_pred, manual_pred]).most_common(1)[0][0]
+            return chosen_pred
+    else:
+        return 0
 
 
 def old_evaluate_square(crop_for_eval: np.ndarray, x_index: int) -> tuple[int, float, int | None]:
@@ -259,14 +263,14 @@ def old_evaluate_square(crop_for_eval: np.ndarray, x_index: int) -> tuple[int, f
 def evaluate_image(bgr_scw_img: np.ndarray,
                    begin_question_box_y: int, end_question_box_y: int,
                    is_50_question_sim: int, debug: str,
-                   loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier):
+                   loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier, id_):
     """heavy lifter of the program. given a processed image, return a dictionary with key: question number and
     value: given answer"""
     draw_img = bgr_scw_img.copy()
     user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 51 - 10 * int(not is_50_question_sim))}
 
     gray_img = cv2.cvtColor(bgr_scw_img, cv2.COLOR_BGR2GRAY)
-    cols_pos_sample_point_y = (bgr_scw_img.shape[0] * 6) // 7
+    cols_pos_sample_point_y = end_question_box_y + 25
 
     # apply x shift because of bad distance between black cols and circles/squares and numbers
     cols_pos_x = [i + Utils.X_COL_SHIFT for i in
@@ -285,6 +289,12 @@ def evaluate_image(bgr_scw_img: np.ndarray,
             cv2.line(draw_img, (x_cut, 0), (x_cut, 700), Utils.CYAN, 1)
 
     y_cuts = get_y_cuts(begin_question_box_y, end_question_box_y)
+    if debug == "all":
+        cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
+        cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
+
+    if debug == "weak" or debug == "all":
+        cv2.imshow("in", bgr_scw_img)
 
     for y_index in range(len(y_cuts) - 1):
         for x_index in range(len(x_cuts) - 1):
@@ -337,46 +347,42 @@ def evaluate_image(bgr_scw_img: np.ndarray,
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   Utils.RED, 1)
                     user_answer_dict[question_number] = "L"
-
-    if debug == "all":
-        cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
-        cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
-
     if debug == "weak" or debug == "all":
-        cv2.imshow("in", bgr_scw_img)
         cv2.imshow("out", draw_img)
         cv2.waitKey()
     return user_answer_dict
 
 
-def calculate_single_sub_score(score_list):
+def calculate_single_sub_score(score_dict: dict[int, float]):
     """Divide scores for each subject. order in return matter!"""
     noq_for_sub = {
-        "Cultura": [0, 8],
-        "biologia": [8, 23],
-        "chimicaFisica": [23, 38],
+        "Cultura": [0, 7],
+        "biologia": [8, 22],
+        "chimicaFisica": [23, 37],
         "matematicaLogica": [38, 50]
     }
-    risultati_Cultura = score_list[
-                        noq_for_sub.get("Cultura")[0]:noq_for_sub.get("Cultura")[1]]
-    risultati_biologia = score_list[
-                         noq_for_sub.get("biologia")[0]:noq_for_sub.get("biologia")[1]]
-    risultati_chimicaFisica = score_list[
-                              noq_for_sub.get("chimicaFisica")[0]:noq_for_sub.get("chimicaFisica")[1]]
-    risultati_matematicaLogica = score_list[
-                                 noq_for_sub.get("matematicaLogica")[0]:noq_for_sub.get("matematicaLogica")[1]]
+    risultati_Cultura, risultati_biologia, risultati_chimicaFisica, risultati_matematicaLogica = 0, 0, 0, 0
 
-    return [sum(risultati_biologia), sum(risultati_chimicaFisica),
-            sum(risultati_matematicaLogica), sum(risultati_Cultura)]
+    for qst_number, score in score_dict.items():
+        if noq_for_sub.get("Cultura")[0] <= qst_number <= noq_for_sub.get("Cultura")[1]:
+            risultati_Cultura += score
+        if noq_for_sub.get("biologia")[0] <= qst_number <= noq_for_sub.get("biologia")[1]:
+            risultati_biologia += score
+        if noq_for_sub.get("chimicaFisica")[0] <= qst_number <= noq_for_sub.get("chimicaFisica")[1]:
+            risultati_chimicaFisica += score
+        if noq_for_sub.get("matematicaLogica")[0] <= qst_number <= noq_for_sub.get("matematicaLogica")[1]:
+            risultati_matematicaLogica += score
+
+    return [risultati_Cultura, risultati_biologia, risultati_chimicaFisica, risultati_matematicaLogica]
 
 
-def generate_score_list(user_answer_dict: Dict[int, str]) \
-        -> list[float]:
+def generate_score_dict(user_answer_dict: Dict[int, str]) \
+        -> dict[int, float]:
     """given the answer that a user has submitted, calculate if they are right or not and assign it
     corresponding score"""
     correct_answers: list = cu.retrieve_or_display_answers()
 
-    score_list: List[float] = []
+    score_dict: dict[int, float] = {i+1: 0 for i in range(50)}
 
     for i in range(len(user_answer_dict)):
         pre = correct_answers[i].split(";")
@@ -384,21 +390,38 @@ def generate_score_list(user_answer_dict: Dict[int, str]) \
         user_letter = user_answer_dict[i + 1]
         if letter == "*" or user_letter == "L":
             # question got canceled or the user decided to lock the answer
-            score_list.append(0)
+            score_dict[i+1] = 0
             user_answer_dict[i + 1] = ""
             continue
         if not user_letter:
             # no given answer
-            score_list.append(0)
+            score_dict[i+1] = 0
 
         else:
             if user_letter in letter:
                 # check if the given letter is IN the corrected letters (no "==" since, by mistake, more options
                 # could be correct)
-                score_list.append(1)
+                score_dict[i+1] = 1
             else:
-                score_list.append(-0.25)
-    return score_list
+                score_dict[i+1] = -0.25
+    return score_dict
+
+
+def compute_subject_average(all_user: list[User]):
+    cultura = []
+    biologia = []
+    chimicaFisica = []
+    matematicaLogica = []
+    for user in all_user:
+        cultura.append(user.per_sub_score[0])
+        biologia.append(user.per_sub_score[1])
+        chimicaFisica.append(user.per_sub_score[2])
+        matematicaLogica.append(user.per_sub_score[3])
+
+    print(f"media cultura: {np.mean(cultura)}")
+    print(f"media biologia: {np.mean(biologia)}")
+    print(f"media chimicaFisica: {np.mean(chimicaFisica)}")
+    print(f"media matematicaLogica: {np.mean(matematicaLogica)}")
 
 
 def get_question_distribution_from_user_list(all_users: list[User], is_50_question_sim)\
@@ -411,7 +434,7 @@ def get_question_distribution_from_user_list(all_users: list[User], is_50_questi
             pre = correct_answers[i].split(";")
             number, letter = pre[0].split(" ")
             user_letter = user.sorted_user_answer_dict[i + 1]
-            if not user_letter:
+            if user_letter == "" or user_letter == "L":
                 # add that this person did not answer this question
                 question_distribution[i][1] += 1
             else:
@@ -422,6 +445,8 @@ def get_question_distribution_from_user_list(all_users: list[User], is_50_questi
                     # add that this person got the i-th question wrong
                     question_distribution[i][2] += 1
     return question_distribution
+
+
 def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
     """warp affine the scaled image to straight the question box and make it fit full width"""
     gr_SC_img: np.array = cv2.cvtColor(BGR_SC_img, cv2.COLOR_BGR2GRAY)
@@ -446,7 +471,7 @@ def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
 
 def evaluator(abs_img_path: str | os.PathLike | bytes,
               valid_ids: list[str], is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
-              loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier, idx: int|None = None) \
+              loaded_svm_classifier: SVC | None, loaded_knn_classifier: KNeighborsClassifier | None, idx: int|None = None) \
         -> User:
     """entry point of application. Responsible for:
         - reading the image,
@@ -455,6 +480,8 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
         - create User object"""
     BGR_img = cv2.imread(abs_img_path)
     cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
+    id_ = abs_img_path.split('_')[-1]
+    print(f"Eval {id_}")
     if cropped_bar_code_id not in valid_ids:
         cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
 
@@ -463,15 +490,15 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     user_answer_dict = evaluate_image(BGR_SCW_img,
                                       transformed_begin_question_box_y, transformed_end_question_box_y,
                                       is_50_question_sim, debug,
-                                      loaded_svm_classifier, loaded_knn_classifier)
+                                      loaded_svm_classifier, loaded_knn_classifier, id_)
 
     # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
-    score_list = generate_score_list(
+    score_dict = generate_score_dict(
         user_answer_dict)
-    per_sub_score = calculate_single_sub_score(score_list) if is_50_question_sim else []
+    per_sub_score = calculate_single_sub_score(score_dict) if is_50_question_sim else []
 
-    # create user
-    user = User(cropped_bar_code_id, sum(score_list), per_sub_score, score_list, user_answer_dict)
+    # create user1
+    user = User(cropped_bar_code_id, sum(list(score_dict.values())), per_sub_score, score_dict, user_answer_dict)
     return user
 
 
@@ -494,15 +521,17 @@ def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_ef
         -> tuple[list[User], dict[int, list[int, int, int]]]:
     """create the process obj, start them, wait for them to finish and returns the evaluated relevant obj"""
     path_to_models = os.getcwd()
+
     loaded_svm_classifier: SVC = load_model(os.path.join(path_to_models, "svm_model"))
     loaded_knn_classifier: KNeighborsClassifier = load_model(os.path.join(path_to_models, "knn_model"))
 
     cargo = [[os.path.join(path, file_name), valid_ids,
-              is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for idx, file_name in enumerate(os.listdir(path))]
+              is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for idx, file_name in enumerate(os.listdir(path)[:50])]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     print(start_end_idxs)
     with multiprocessing.Pool(processes=max_process) as pool:
         all_users: list[User] = pool.starmap(evaluator, cargo)
 
     question_distribution = get_question_distribution_from_user_list(all_users, is_50_question_sim)
+    compute_subject_average(all_users)
     return all_users, question_distribution

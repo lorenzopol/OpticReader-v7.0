@@ -59,7 +59,47 @@ def answer_modifier(number, correct):
         print("non è stato salvato alcun file come risposte, creane uno scegliendo l'opzione 1")
 
 
-def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
+def pre_xlsx_dumper(workbook, correct_answers, is_50_question_sim):
+    worksheet = workbook.worksheets()[0]
+    worksheet.merge_range('A1:D1', 'n° Domanda', workbook.add_format({'bold': 1,
+                                                                      'border': 1,
+                                                                      'align': 'center',
+                                                                      'valign': 'vcenter'})
+                          )
+    # Create question number header
+    _0_header = [*range(1, 51 - (10 * int(not is_50_question_sim)))]
+    for col_num, data in enumerate(_0_header):
+        worksheet.write(0, col_num + 4, data, workbook.add_format({'border': 1,
+                                                                   'align': 'center',
+                                                                   'valign': 'vcenter',
+                                                                   "color": "white",
+                                                                   "bg_color": "#4287F5"}))
+
+    worksheet.merge_range('A2:D2', "RISPOSTA ESATTA", workbook.add_format({'bold': 1,
+                                                                           'border': 1,
+                                                                           'align': 'center',
+                                                                           'valign': 'vcenter',
+                                                                           }))
+    # Create correct answer header
+    _1_header = [*[correct_answers[i].split(";")[0].split(" ")[1]
+                   for i in range(len(correct_answers[:50 - (10 * int(not is_50_question_sim))]))]]
+    for col_num, data in enumerate(_1_header):
+        worksheet.write(1, col_num + 4, data, workbook.add_format({'border': 1,
+                                                                   'align': 'center',
+                                                                   'valign': 'vcenter',
+                                                                   "color": "white",
+                                                                   "bold": 1,
+                                                                   "bg_color": "#4287F5"}))
+    _4_header = ["Punteggio Cultura", "Punteggio Biologia", "Punteggio ChimicaFisica", "Punteggio Matematica"]
+    for col_num, data in enumerate(_4_header):
+        worksheet.write(3, 4 + (50 - (10 * int(not is_50_question_sim))) + col_num, data,
+                        workbook.add_format({'bold': 1,
+                                             'border': 1,
+                                             'align': 'center',
+                                             'valign': 'vcenter'}))
+
+
+def xlsx_dumper(user, placement, workbook, is_50_question_sim):
     formats = [workbook.add_format({'border': 1,
                                     'align': 'center',
                                     'valign': 'vcenter'}),
@@ -75,37 +115,9 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
     worksheet = workbook.worksheets()[0]
     v_delta = 4
 
-    worksheet.merge_range('A1:C1', 'n° Domanda', workbook.add_format({'bold': 1,
-                                                                      'border': 1,
-                                                                      'align': 'center',
-                                                                      'valign': 'vcenter'})
-                          )
-    # Create question number header
-    _0_header = [*range(1, 51 - (10 * int(not is_50_question_sim)))]
-    for col_num, data in enumerate(_0_header):
-        worksheet.write(0, col_num + 3, data, workbook.add_format({'border': 1,
-                                                                   'align': 'center',
-                                                                   'valign': 'vcenter',
-                                                                   "color": "white",
-                                                                   "bg_color": "#4287F5"}))
-
-    worksheet.merge_range('A2:C2', "RISPOSTA ESATTA", workbook.add_format({'bold': 1,
-                                                                           'border': 1,
-                                                                           'align': 'center',
-                                                                           'valign': 'vcenter',
-                                                                           }))
-    # Create correct answer header
-    _1_header = [*[correct_answers[i].split(";")[0].split(" ")[1]
-                   for i in range(len(correct_answers[:50 - (10 * int(not is_50_question_sim))]))]]
-    for col_num, data in enumerate(_1_header):
-        worksheet.write(1, col_num + 3, data, workbook.add_format({'border': 1,
-                                                                   'align': 'center',
-                                                                   'valign': 'vcenter',
-                                                                   "color": "white",
-                                                                   "bold": 1,
-                                                                   "bg_color": "#4287F5"}))
     # for percentage mod *range(50)
-    _3_header = ["Posizione", "ID", "Punteggio", *[0] * 0 * (50 - (10 * int(not is_50_question_sim)))]
+    _3_header = ["Posizione", "ID", "Punteggio Equalizzato", "Punteggio Normale",
+                 *[0] * (50 - (10 * int(not is_50_question_sim)))]
     for col_num, data in enumerate(_3_header):
         worksheet.write(3, col_num, data, workbook.add_format({'bold': 1,
                                                                'border': 1,
@@ -118,15 +130,24 @@ def xlsx_dumper(user, placement, correct_answers, workbook, is_50_question_sim):
     worksheet.write(f'B{placement + v_delta}', f'{user.index}', workbook.add_format({'border': 1,
                                                                                      'align': 'center',
                                                                                      'valign': 'vcenter', }))
-    worksheet.write_number(f'C{placement + v_delta}', user.score, workbook.add_format({'border': 1,
-                                                                                       'align': 'center',
-                                                                                       'valign': 'vcenter', }))
-
-    h_delta = 3
+    worksheet.write_number(f'C{placement + v_delta}', round(user.score, 2), workbook.add_format({'border': 1,
+                                                                                                 'align': 'center',
+                                                                                                 'valign': 'vcenter', }))
+    worksheet.write_number(f'D{placement + v_delta}', round(user.score - user.ceq, 2), workbook.add_format({'border': 1,
+                                                                                                            'align': 'center',
+                                                                                                            'valign': 'vcenter', }))
+    h_delta = 4
     for number in range(h_delta, 50 + h_delta - (10 * int(not is_50_question_sim))):
         worksheet.write(placement + v_delta - 1, number,
                         f'{user.sorted_user_answer_dict[number + 1 - h_delta]}',
-                        formats[round(abs(user.score_list[number - h_delta]) * 2.4)])
+                        formats[round(abs(user.score_dict[number - h_delta + 1]) * 2.4)])
+    h_delta = len(_3_header)
+
+    for sub_idx, subject_score in enumerate(user.per_sub_score):
+        worksheet.write_number(placement + v_delta - 1, h_delta + sub_idx, subject_score,
+                               workbook.add_format({'border': 1,
+                                                    'align': 'center',
+                                                    'valign': 'vcenter', }))
 
 
 def calculate_test_complexity_index(qst_distribution, nof_participant, max_score):

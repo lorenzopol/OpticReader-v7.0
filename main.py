@@ -49,6 +49,7 @@ class DpgExt:
         is_50_question_sim = dpg.get_value("50QuestionForm")
         is_barcode_ean13 = dpg.get_value("EAN13")
         is_multithread = dpg.get_value("MultiThread")
+        is_evaluate = dpg.get_value("Evaluate")
         debug = dpg.get_value("debug")
         max_number_of_tests = dpg.get_value("maxPeople")
         valid_ids = [f"{i:03}" for i in range(max_number_of_tests)] if is_barcode_ean13 else \
@@ -69,27 +70,39 @@ class DpgExt:
                 is_50_question_sim, debug,
                 is_barcode_ean13)
         else:
+            print("multithread not selected. Default behaviour will not evaluate scores")
             path_to_models = os.getcwd()
-            loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
-            loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+            if is_evaluate:
+                loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
+                loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+            else:
+                loaded_svm_classifier = None
+                loaded_knn_classifier = None
+
             for filename in os.listdir(path):
-                all_users, question_distribution = evaluator(
+                _ = evaluator(
                     os.path.join(path, filename), valid_ids,
                     is_50_question_sim,
                     debug, is_barcode_ean13,
                     loaded_svm_classifier, loaded_knn_classifier)
+            question_distribution = None
+            all_users = None
+
+
         if question_distribution is not None and all_users is not None:
             ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
             for user in all_users:
                 user.score = round((user.score + ceq), 2)
+                user.ceq = ceq
             sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
+            cu.pre_xlsx_dumper(workbook, cu.retrieve_or_display_answers(), is_50_question_sim)
             for placement, user in enumerate(sorted_by_score_user_list):
-                cu.xlsx_dumper(user, placement + 1, cu.retrieve_or_display_answers(), workbook, is_50_question_sim)
+                cu.xlsx_dumper(user, placement + 1, workbook, is_50_question_sim)
 
             worksheet = workbook.worksheets()[0]
             for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
                 nof_correct, nof_not_given, nof_wrong = people_who_got_correct_not_given_and_wrong_answ
-                worksheet.write(3, 3 + col, f"{round(nof_correct / (placement + 1) * 100)}%",
+                worksheet.write(3, 4 + col, f"{round(nof_correct / (placement + 1) * 100)}%",
                                 workbook.add_format({'bold': 1,
                                                      'border': 1,
                                                      'align': 'center',
@@ -105,36 +118,75 @@ class DpgExt:
                                                       'valign': 'vcenter', })
             # stats_dump
             # =INDICE($A$5:$A$14; CONFRONTA(MIN(ASS($C$5:$C$14-C20)); ASS($C$5:$C$14-C20); 0))
-            formula_range = f"$C$5:$C${placement + 4 + 1}"
-            worksheet.write(placement + 5 + 1, 1, "Media", stats_keys_format)
-            worksheet.write_formula(placement + 5 + 1, 2, f"=_xlfn.AVERAGE({formula_range})", stats_value_format)
-            worksheet.write_formula(placement + 5 + 1, 3,
+            worksheet.write(placement + 4 + 1, 3, f"Numero di risposte corrette",
+                            workbook.add_format({'bold': 1,
+                                                 'border': 1,
+                                                 'align': 'center',
+                                                 'valign': 'vcenter'})
+                            )
+            worksheet.write(placement + 5 + 1, 3, f"Numero di risposte non date",
+                            workbook.add_format({'bold': 1,
+                                                 'border': 1,
+                                                 'align': 'center',
+                                                 'valign': 'vcenter'})
+                            )
+            worksheet.write(placement + 6 + 1, 3, f"Numero di risposte sbagliate",
+                            workbook.add_format({'bold': 1,
+                                                 'border': 1,
+                                                 'align': 'center',
+                                                 'valign': 'vcenter'})
+                            )
+            for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
+                nof_correct, nof_not_given, nof_wrong = people_who_got_correct_not_given_and_wrong_answ
+                worksheet.write(placement + 4 + 1, 4 + col, f"{round(nof_correct / (placement + 1), 2)}",
+                                workbook.add_format({'bold': 1,
+                                                     'border': 1,
+                                                     'align': 'center',
+                                                     'valign': 'vcenter'})
+                                )
+                worksheet.write(placement + 5 + 1, 4 + col, f"{round(nof_not_given / (placement + 1), 2)}",
+                                workbook.add_format({'bold': 1,
+                                                     'border': 1,
+                                                     'align': 'center',
+                                                     'valign': 'vcenter'})
+                                )
+                worksheet.write(placement + 6 + 1, 4 + col, f"{round(nof_wrong / (placement + 1), 2)}",
+                                workbook.add_format({'bold': 1,
+                                                     'border': 1,
+                                                     'align': 'center',
+                                                     'valign': 'vcenter'})
+                                )
+
+            formula_range = f"$C$5:$C${placement + 7 + 1}"
+            worksheet.write(placement + 8 + 1, 1, "Media", stats_keys_format)
+            worksheet.write_formula(placement + 8 + 1, 2, f"=_xlfn.AVERAGE({formula_range})", stats_value_format)
+            worksheet.write_formula(placement + 8 + 1, 3,
                                     f"=_xlfn.INDEX($A$5:$A${placement+4+1}, _xlfn.MATCH(_xlfn.MIN(_xlfn.ABS({formula_range}-C{placement + 5 + 2})), _xlfn.ABS({formula_range}-C{placement + 5 + 2}), 0))",
                                     stats_value_format)
 
-            worksheet.write(placement + 6 + 1, 1, "Mediana", stats_keys_format)
-            worksheet.write_formula(placement + 6 + 1, 2, f"=_xlfn.MEDIAN({formula_range})", stats_value_format)
+            worksheet.write(placement + 9 + 1, 1, "Mediana", stats_keys_format)
+            worksheet.write_formula(placement + 9 + 1, 2, f"=_xlfn.MEDIAN({formula_range})", stats_value_format)
 
             # worksheet.write(placement + 7 + 1, 1, "Moda", stats_keys_format)
             # worksheet.write_formula(placement + 7 + 1, 2, f"=_xlfn.MODE({formula_range})", stats_value_format)
 
-            worksheet.write(placement + 8 + 1, 1, "Massimo", stats_keys_format)
-            worksheet.write_formula(placement + 8 + 1, 2, f"=_xlfn.MAX({formula_range})", stats_value_format)
+            worksheet.write(placement + 11 + 1, 1, "Massimo", stats_keys_format)
+            worksheet.write_formula(placement + 11 + 1, 2, f"=_xlfn.MAX({formula_range})", stats_value_format)
 
-            worksheet.write(placement + 9 + 1, 1, "Minimo", stats_keys_format)
-            worksheet.write_formula(placement + 9 + 1, 2, f"=_xlfn.MIN({formula_range})", stats_value_format)
+            worksheet.write(placement + 12 + 1, 1, "Minimo", stats_keys_format)
+            worksheet.write_formula(placement + 12 + 1, 2, f"=_xlfn.MIN({formula_range})", stats_value_format)
 
-            worksheet.write(placement + 5 + 1, 5, "Q1", stats_keys_format)
-            worksheet.write_formula(placement + 5 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 1)", stats_value_format)
+            worksheet.write(placement + 8 + 1, 5, "Q1", stats_keys_format)
+            worksheet.write_formula(placement + 8 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 1)", stats_value_format)
 
-            worksheet.write(placement + 6 + 1, 5, "Q2", stats_keys_format)
-            worksheet.write_formula(placement + 6 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 2)", stats_value_format)
+            worksheet.write(placement + 9 + 1, 5, "Q2", stats_keys_format)
+            worksheet.write_formula(placement + 9 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 2)", stats_value_format)
 
-            worksheet.write(placement + 7 + 1, 5, "Q3", stats_keys_format)
-            worksheet.write_formula(placement + 7 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 3)", stats_value_format)
+            worksheet.write(placement + 10 + 1, 5, "Q3", stats_keys_format)
+            worksheet.write_formula(placement + 10 + 1, 6, f"=_xlfn.QUARTILE({formula_range}, 3)", stats_value_format)
             workbook.close()
         else:
-            exit("CRITICAL ERROR")
+            print("CRITICAL ERROR")
 
         DpgExt.exit_launch("", "", "")
         dpg.show_item("EX")
@@ -238,7 +290,7 @@ def main():
         with dpg.group(label="##percorsi", horizontal=True):
             dpg.add_text("Percorso alle sacnsioni: ")
             dpg.add_input_text(label="", tag="pathToScan", callback=DpgExt.confirm_launch, on_enter=True, width=250,
-                               default_value=r"E:\luglio")
+                               default_value=r"E:\novembre")
             dpg.add_button(label="OK", callback=DpgExt.confirm_path)
 
         dpg.add_spacer(height=5)
@@ -250,12 +302,15 @@ def main():
             with dpg.group(horizontal=True, tag="CQN"):
                 dpg.add_text("Simulazione da 50 quesiti?")
                 dpg.add_checkbox(label="", tag="50QuestionForm", default_value=True)
-                dpg.add_spacer(width=30)
+                dpg.add_spacer(width=15)
                 dpg.add_text("EAN13?")
                 dpg.add_checkbox(label="", tag="EAN13", default_value=True)
-                dpg.add_spacer(width=30)
+                dpg.add_spacer(width=15)
                 dpg.add_text("MultiThread?")
                 dpg.add_checkbox(label="", tag="MultiThread", default_value=True)
+            with dpg.group(horizontal=True, tag="eval"):
+                dpg.add_text("Evaluate?")
+                dpg.add_checkbox(label="", tag="Evaluate", default_value=True)
             with dpg.group(horizontal=True, tag="DEB"):
                 dpg.add_text("Debug?")
                 dpg.add_combo(items=["No", "weak", "all"], tag="debug")
@@ -295,7 +350,7 @@ def main():
 
 
 def run_with_profiling():
-    prof_path = r"E:\luglio"
+    prof_path = r"E:\novembre"
     prof_nof_pres_eff = len(os.listdir(prof_path))
     prof_valid_ids = [f"{i:03}" for i in range(1000)]
     prof_is_50_question_sim = True
