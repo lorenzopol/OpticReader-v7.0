@@ -91,7 +91,7 @@ def train_svm_knn(path_to_dataset, full=False):
 
 
 def save_model(model, filename):
-    save_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0"
+    save_path = os.getcwd()
     with open(os.path.join(save_path, filename), "wb") as cfile:
         pickle.dump(model, cfile)
 
@@ -103,7 +103,7 @@ def load_model(full_path_to_model):
 
 
 if __name__ == "__main__":
-    dataset_path = r'C:\Users\loren\PycharmProjects\OpticReader v7.0\train_and_test_data_reduced'
+    dataset_path = os.path.join(os.getcwd(), "train_and_test_data_reduced")
 
     svm_classifier, knn_classifier = train_svm_knn(dataset_path)
     save_model(svm_classifier, "svm_model")
