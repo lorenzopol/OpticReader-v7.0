@@ -25,8 +25,6 @@ It was developed to be used in simulation contexts of the national entrance test
 In particular, the development started as a personal project and, since December 2021, it has continuously been
 used in real world scenarios during  [_"Studenti e Prof Uniti per"_](https://studentieprofunitiper.it/) association's 
 simulations.
- 
-<!-- You don't have to answer all the questions - just the ones relevant to your project. -->
 
 
 ## Technologies Used
