@@ -90,7 +90,7 @@ def pre_xlsx_dumper(workbook, correct_answers, is_50_question_sim):
                                                                    "color": "white",
                                                                    "bold": 1,
                                                                    "bg_color": "#4287F5"}))
-    _4_header = ["Punteggio Cultura", "Punteggio Biologia", "Punteggio ChimicaFisica", "Punteggio Matematica"]
+    _4_header = ["Punteggio Cultura", "Punteggio Biologia", "Punteggio Anatomia", "Punteggio ChimicaFisica", "Punteggio Matematica"]
     for col_num, data in enumerate(_4_header):
         worksheet.write(3, 4 + (50 - (10 * int(not is_50_question_sim))) + col_num, data,
                         workbook.add_format({'bold': 1,

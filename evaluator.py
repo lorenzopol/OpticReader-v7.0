@@ -293,7 +293,7 @@ def evaluate_image(bgr_scw_img: np.ndarray,
         cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
 
     if debug == "weak" or debug == "all":
-        cv2.imshow("in", bgr_scw_img)
+        cv2.imshow("in", draw_img)
 
     for y_index in range(len(y_cuts) - 1):
         for x_index in range(len(x_cuts) - 1):
@@ -356,23 +356,27 @@ def calculate_single_sub_score(score_dict: dict[int, float]):
     """Divide scores for each subject. order in return matter!"""
     noq_for_sub = {
         "Cultura": [0, 7],
-        "biologia": [8, 22],
+        "biologia": [8, 17],
+        "anatomia": [18, 22],
         "chimicaFisica": [23, 37],
         "matematicaLogica": [38, 50]
     }
-    risultati_Cultura, risultati_biologia, risultati_chimicaFisica, risultati_matematicaLogica = 0, 0, 0, 0
+    risultati_Cultura, risultati_biologia, risultati_anatomia, risultati_chimicaFisica, risultati_matematicaLogica = 0, 0, 0, 0, 0
 
     for qst_number, score in score_dict.items():
         if noq_for_sub.get("Cultura")[0] <= qst_number <= noq_for_sub.get("Cultura")[1]:
             risultati_Cultura += score
         if noq_for_sub.get("biologia")[0] <= qst_number <= noq_for_sub.get("biologia")[1]:
             risultati_biologia += score
+        if noq_for_sub.get("anatomia")[0] <= qst_number <= noq_for_sub.get("anatomia")[1]:
+            risultati_anatomia += score
+
         if noq_for_sub.get("chimicaFisica")[0] <= qst_number <= noq_for_sub.get("chimicaFisica")[1]:
             risultati_chimicaFisica += score
         if noq_for_sub.get("matematicaLogica")[0] <= qst_number <= noq_for_sub.get("matematicaLogica")[1]:
             risultati_matematicaLogica += score
 
-    return [risultati_Cultura, risultati_biologia, risultati_chimicaFisica, risultati_matematicaLogica]
+    return [risultati_Cultura, risultati_biologia, risultati_anatomia,risultati_chimicaFisica, risultati_matematicaLogica]
 
 
 def generate_score_dict(user_answer_dict: Dict[int, str]) \
@@ -409,16 +413,19 @@ def generate_score_dict(user_answer_dict: Dict[int, str]) \
 def compute_subject_average(all_user: list[User]):
     cultura = []
     biologia = []
+    anatomia = []
     chimicaFisica = []
     matematicaLogica = []
     for user in all_user:
         cultura.append(user.per_sub_score[0])
         biologia.append(user.per_sub_score[1])
-        chimicaFisica.append(user.per_sub_score[2])
-        matematicaLogica.append(user.per_sub_score[3])
+        anatomia.append(user.per_sub_score[2])
+        chimicaFisica.append(user.per_sub_score[3])
+        matematicaLogica.append(user.per_sub_score[4])
 
     print(f"media cultura: {np.mean(cultura)}")
     print(f"media biologia: {np.mean(biologia)}")
+    print(f"media anatomia: {np.mean(anatomia)}")
     print(f"media chimicaFisica: {np.mean(chimicaFisica)}")
     print(f"media matematicaLogica: {np.mean(matematicaLogica)}")
 
@@ -525,7 +532,7 @@ def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_ef
     loaded_knn_classifier: KNeighborsClassifier = load_model(os.path.join(path_to_models, "knn_model"))
 
     cargo = [[os.path.join(path, file_name), valid_ids,
-              is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for idx, file_name in enumerate(os.listdir(path)[:50])]
+              is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for idx, file_name in enumerate(os.listdir(path))]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     print(start_end_idxs)
     with multiprocessing.Pool(processes=max_process) as pool:

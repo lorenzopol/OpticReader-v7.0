@@ -88,7 +88,6 @@ class DpgExt:
             question_distribution = None
             all_users = None
 
-
         if question_distribution is not None and all_users is not None:
             ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
             for user in all_users:
@@ -290,7 +289,7 @@ def main():
         with dpg.group(label="##percorsi", horizontal=True):
             dpg.add_text("Percorso alle sacnsioni: ")
             dpg.add_input_text(label="", tag="pathToScan", callback=DpgExt.confirm_launch, on_enter=True, width=250,
-                               default_value=r"E:\novembre")
+                               default_value=r"D:\dicembre")
             dpg.add_button(label="OK", callback=DpgExt.confirm_path)
 
         dpg.add_spacer(height=5)

@@ -102,9 +102,9 @@ The fact that I am no longer actively working on OpticReader does not mean that 
 
 Room for improvement:
 - despite being quite robust the **alignment** algorithm does not catch all edge cases. It would be awsome to modify the current template in order to use warpAffine function on three predetermined objects (like positional marker printed on the corners);
-- the current three-voting **classification** system is based on a SVC, KNN and a personally developed case specific algorithm. It would be interesting to see if a CNN could be implemented for such task and if new, non-ML based algorithm can be developed for this task;
+- the current three-voting **classification** system is based on a SVC, KNN and a personally developed case specific algorithm. It would be interesting to see if a CNN could be implemented for such task and if new non-ML based algorithm can be developed for this task;
 - current **GUI** is functional and user-friendly. Major work can be done to aesthetic and flexibility;
-- Currently, if run with default parameters, OpticReader runs with **multithreading** (as far as GIL is concerned). Being this the latest addition and not my strongest topic, additional refinement can (and probably should) be done. 
+- Currently, if run with default parameters, OpticReader runs with **multiprocessing**. Being this the latest addition and not my strongest topic, additional refinement can (and probably should) be done. 
 
 
 
