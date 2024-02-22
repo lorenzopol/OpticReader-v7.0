@@ -2,5 +2,5 @@
 train_and_test_data_reduced
 blank_barcoded_tests
 notes.txt
-Multithreading result.png
+*.xlsx
 tryMultiThread.py

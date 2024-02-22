@@ -62,13 +62,13 @@ As stated above, OpticReader can take a directory full of scanned exam sheets (c
 ## Screenshots
 Some helper screenshots for those who are unfamiliar with the exam sheet layout (this is a recreation created by me)
 ### Base Template
-![Base template](screenshots%2Freduced_res_50QUES.png)
+![Base template](screenshots/reduced_res_50QUES.png)
 ### Sample input
 This is what a correctly filled form could look like after being scanned. 
-![sample_input.jpg](screenshots%2Fsample_input.jpg) 
+![sample_input.jpg](screenshots/sample_input.jpg) 
 ### Sample output
 This is how OpticReader evaluate the sample input exam sheet. The green square means that the selected option has been evaluated as chosen.    
-![sample_output.png](screenshots%2Fsample_output.png)
+![sample_output.png](screenshots/sample_output.png)
 
 ## Setup
 Check the [Technologies Used](#technologies-used) section for requirements. Microsoft Excel is necessary for opening the rankings file at the end of the app execution.

@@ -214,7 +214,6 @@ def evaluate_square(cropped_to_bound: np.ndarray, x_index: int,
         if x_index % 7 == 0:
             svm_pred = cast_square_to_circle(svm_classifier.predict([crop_for_prediction])[0])
             knn_pred = cast_square_to_circle(knn_classifier.predict([crop_for_prediction])[0])
-
         if svm_pred == knn_pred == manual_pred:
             return knn_pred  # if they agree, return one of them
         else:
@@ -357,7 +356,7 @@ def calculate_single_sub_score(score_dict: dict[int, float]):
     noq_for_sub = {
         "Cultura": [0, 7],
         "biologia": [8, 17],
-        "anatomia": [18, 22],
+        "anatomia": [19, 22],
         "chimicaFisica": [23, 37],
         "matematicaLogica": [38, 50]
     }
@@ -487,7 +486,6 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     BGR_img = cv2.imread(abs_img_path)
     cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
     id_ = abs_img_path.split('_')[-1]
-    print(f"Eval {id_}")
     if cropped_bar_code_id not in valid_ids:
         cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
 
