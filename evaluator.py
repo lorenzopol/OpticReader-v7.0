@@ -61,100 +61,6 @@ class Utils:
     }
 
 
-def one_d_row_slice(img: np.ndarray, y: int) -> np.ndarray:
-    """given a np array it returns the y-th row """
-    assert y + 1 < img.shape[0], f"[ERROR]: one_d_row_slice tried accessing out of bound array: {img} with idx: {y + 1}"
-    return img[y:y + 1, :]
-
-
-def one_d_col_slice(img: np.ndarray, x: int) -> np.ndarray:
-    """given a np array it returns the x-th col """
-    assert x + 1 < img.shape[1], f"[ERROR]: one_d_col_slice tried accessing out of bound array: {img} with idx: {x + 1}"
-    return img[:, x:x + 1]
-
-
-def from_col_to_row(col: np.ndarray) -> np.ndarray:
-    return col.reshape((1, col.shape[0]))
-
-
-def find_n_black_point_on_row(one_d_sliced: np.ndarray, bool_threshold: int = 165) -> list[int]:
-    """refactor may be needed. Check TI_canny_find_n_black_point_on_row and TI_canny_find_n_black_point_on_col"""
-    bool_arr: np.ndarray = (one_d_sliced < bool_threshold)[0]
-
-    positions = np.where(bool_arr == 1)[0]
-
-    out = [i for i in positions]
-    popped = 0
-    for index in range(1, len(positions)):
-        if positions[index] - positions[index - 1] < 10:
-            del out[index - popped]
-            popped += 1
-    return out
-
-
-def TI_canny_find_n_black_point_on_row(BGR_SCW_img: np.ndarray, cols_pos_sample_point_y: int) -> list[int]:
-    """optimized version of find_n_black_point_on_row but currently not know if it works"""
-    gray_img = cv2.cvtColor(BGR_SCW_img, cv2.COLOR_BGR2GRAY)
-    canny = cv2.Canny(gray_img, 100, 200)
-    one_d_slice = one_d_row_slice(canny, cols_pos_sample_point_y)
-    edges_pos = np.where(one_d_slice > 150)[-1]
-    out = [edges_pos[i - 1] + 3 for i in range(1, len(edges_pos)) if edges_pos[i] - edges_pos[i - 1] > 5]
-    out.append(edges_pos[-1])
-    return out
-
-
-def TI_canny_find_n_black_point_on_col(BGR_SCW_img: np.ndarray, row_pos_sample_point_x: int) -> list[int]:
-    """as TI_canny_find_n_black_point_on_row but for finding black points on col"""
-    gray_img = cv2.cvtColor(BGR_SCW_img, cv2.COLOR_BGR2GRAY)
-    canny = cv2.Canny(gray_img, 100, 200)
-    one_d_slice = one_d_col_slice(canny, row_pos_sample_point_x)
-    # should we cast with from_col_to_row?
-    edges_pos = np.where(one_d_slice > 150)[-1]
-    out = [edges_pos[i - 1] + 3 for i in range(1, len(edges_pos)) if edges_pos[i] - edges_pos[i - 1] > 5]
-    out.append(edges_pos[-1])
-    return out
-
-
-def get_top_corner(gr_image: np.ndarray, x_start_pos: int, direction: int) -> tuple[int, int]:
-    """calculate the x;y position of the top corners. The idea behind the algorithm is to start at the middle of the
-    image and walk all the way towards the edge of the image. Ones a corner is reached, the jump of the value of y is
-    going to be big enough that it will be caught by the while loop. Direction > 0 means towards the right side"""
-    one_d_sliced: np.ndarray = from_col_to_row(one_d_col_slice(gr_image, x_start_pos))
-
-    first = find_n_black_point_on_row(one_d_sliced)[0]
-    current_y = first
-
-    while abs(current_y - first) < 7:
-        one_d_sliced: np.ndarray = from_col_to_row(one_d_col_slice(gr_image, x_start_pos))
-        current_y = find_n_black_point_on_row(one_d_sliced)[0]
-        x_start_pos += direction
-
-    # IDK why 2*direction instead of 1*direction
-    x = x_start_pos - 2 * direction
-
-    one_d_sliced: np.ndarray = from_col_to_row(one_d_col_slice(gr_image, x))
-    y = find_n_black_point_on_row(one_d_sliced)[0]
-    return x, y
-
-
-def get_bottom_corner(gr_image: np.ndarray, TL_x: int) -> tuple[int, int]:
-    """currently estimating BL corner to be somewhat close (x-wise) to TL. A proper implementation of get_bottom_corner
-    may be needed"""
-    # fix this
-    last_left_side_point_y = find_n_black_point_on_row(from_col_to_row(one_d_col_slice(gr_image, TL_x)))[-1]
-    last_left_side_point_x = find_n_black_point_on_row(one_d_row_slice(gr_image, last_left_side_point_y - 2))[0]
-
-    return last_left_side_point_x, last_left_side_point_y
-
-
-def get_question_box_y_vals(gr_image: np.ndarray, TL_x: int) -> tuple[int, int]:
-    """grab the left side y value of the black bars that indicates the starting and ending value of the question box"""
-    left_side_y_vals = find_n_black_point_on_row(from_col_to_row(one_d_col_slice(gr_image, TL_x)))
-    begin_question_box_y = left_side_y_vals[0]
-    end_question_box_y = left_side_y_vals[1]
-    return begin_question_box_y, end_question_box_y
-
-
 def transform_point_with_matrix(y, matrix):
     return round(matrix[1][1] * y + matrix[1][2])
 
@@ -174,10 +80,11 @@ def get_x_cuts(cols_x_pos: List[int] | np.array) -> List[int]:
 
 def get_y_cuts(begin_question_box_y: int, end_question_box_y: int) -> np.array:
     """as for get_x_cuts but row-wise"""
+    return np.linspace(begin_question_box_y, end_question_box_y, Utils.QUESTION_PER_COL + 1, dtype=int)
+    # old implementation
     # IDK why but +1 works
     # Utils.Y_ROW_SHIFT gives better squares for the lowest rows
-    square_height = ((end_question_box_y - begin_question_box_y) // Utils.QUESTION_PER_COL) + 1
-    return np.linspace(begin_question_box_y, end_question_box_y, Utils.QUESTION_PER_COL + 1, dtype=int)
+    # square_height = ((end_question_box_y - begin_question_box_y) // Utils.QUESTION_PER_COL) + 1
     # return tuple(
     #     y - Utils.Y_ROW_SHIFT for y in range(begin_question_box_y, end_question_box_y + square_height, square_height))
 
@@ -528,8 +435,6 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
 
     BGR_SC_img = imutils.resize(BGR_img, height=700)
     BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = warp_affine_img(BGR_SC_img)
-    print(f"{transformed_begin_question_box_y = }")
-    print(f"{transformed_end_question_box_y = }")
     user_answer_dict = evaluate_image(BGR_SCW_img,
                                       transformed_begin_question_box_y, transformed_end_question_box_y,
                                       is_50_question_sim, debug,
@@ -572,59 +477,9 @@ def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_ef
               is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for
              idx, file_name in enumerate(os.listdir(path))]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
-    print(start_end_idxs)
     with multiprocessing.Pool(processes=max_process) as pool:
         all_users: list[User] = pool.starmap(evaluator, cargo)
 
     question_distribution = get_question_distribution_from_user_list(all_users, is_50_question_sim)
     compute_subject_average(all_users)
     return all_users, question_distribution
-
-
-def new_align():
-    imgs_path = [r"new_alignment/20231111110309_003.jpg", r"new_alignment\20231111110309_011.jpg",
-                 r"new_alignment\20231111110309_017.jpg"]
-    for img_path in imgs_path:
-        BGR_img = cv2.imread(img_path)
-        BGR_SC_img = imutils.resize(BGR_img, height=650)
-
-        GRAY_SC_img = cv2.cvtColor(BGR_SC_img, cv2.COLOR_BGR2GRAY)
-        gray = np.float32(GRAY_SC_img)
-        dst = cv2.cornerHarris(GRAY_SC_img, 2, 3, 0.04)
-
-        # Find corner points using goodFeaturesToTrack
-        corners = cv2.goodFeaturesToTrack(dst, 150, .01, 10)
-        # flat inner array
-        corners = [corner.ravel() for corner in corners]
-
-        y_sorted = sorted(corners, key=lambda a: a[1])
-        top_points = y_sorted[:2]
-        bottom_points = y_sorted[-1:-3:-1]
-
-        x_sorted = sorted(corners, key=lambda a: a[0])
-        left_points = x_sorted[:2]
-        right_points = x_sorted[-1:-3:-1]
-        key_points = {
-            "top_points": sorted(top_points, key=lambda a: a[0]),
-            "bottom_points": sorted(bottom_points, key=lambda a: a[0]),
-            "left_points": sorted(left_points, key=lambda a: a[1]),
-            "right_points": sorted(right_points, key=lambda a: a[1])
-        }
-
-        # get bounding box
-        TL_corner = key_points["top_points"][0]
-        TR_corner = key_points["top_points"][1]
-        BL_corner = key_points["bottom_points"][0]
-        srcTri = np.array([TL_corner, TR_corner, BL_corner])
-        dstTri = np.array([[0, 0], [BGR_SC_img.shape[1], 0], [0, 650]]).astype(np.float32)
-        warp_mat = cv2.getAffineTransform(srcTri, dstTri).astype(np.float32)
-        BGR_SCW_img = cv2.warpAffine(BGR_SC_img, warp_mat, (BGR_SC_img.shape[1], BGR_SC_img.shape[0]))
-
-        cv2.imshow("source", BGR_SC_img)
-        cv2.imshow("warp", BGR_SCW_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    new_align()
