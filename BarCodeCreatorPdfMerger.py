@@ -45,7 +45,7 @@ def merge_to_one_pdf(path_to_images):
             print(f"{file} end")
 
     first = all_images.pop(0)
-    first.save(r"full_pd.pdf", save_all=True, append_images=all_images)
+    first.save(r"full_pd.pdf", save_all=True, append_images=all_images, resolution=25.0)
 
 
 def decode_EAN_barcode(cropped_img):
