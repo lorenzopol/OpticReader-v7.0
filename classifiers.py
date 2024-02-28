@@ -53,7 +53,7 @@ def train_svm_knn(path_to_dataset, full=False):
         "CB": 3,
         "CA": 4
     }
-    neighbours = 11
+    neighbours = 3
 
     imgs_list = []
     filename_list = []
@@ -106,5 +106,5 @@ if __name__ == "__main__":
     dataset_path = os.path.join(os.getcwd(), "train_and_test_data_reduced")
 
     svm_classifier, knn_classifier = train_svm_knn(dataset_path)
-    save_model(svm_classifier, "svm_model")
-    save_model(knn_classifier, "knn_model")
+    # save_model(svm_classifier, "svm_model")
+    # save_model(knn_classifier, "knn_model")
