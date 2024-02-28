@@ -32,12 +32,22 @@ class Utils:
     YELLOW = (0, 220, 220)
     COLOR_LIST = [BLUE, GREEN, RED, MAGENTA, CYAN, YELLOW]
 
+    BOOL_THRESHOLD = 200
+
+    X_SAMPLE_POS_FOR_CUTS = 5
+    Y_SAMPLE_POS_FOR_CUTS = 30  # it is the delta from end_question_box
+
+    BEGIN_QUESTION_BOX_Y_SHIFT = 2
+    FIRST_X_CUT_SHIFT = 3
+
+    X_CUTS_SHIFTER = [3, 2, 0, 0, 0, 0, 0]
+
     QUESTION_PER_COL = 15
     SQUARE_DIM = 16
 
     X_COL_SHIFT = 2
     Y_ROW_SHIFT = 4
-    
+
     BEGIN_QUESTION_BOX_Y_ESTIMATE = 154
     END_QUESTION_BOX_Y_ESTIMATE = 423
     ESTIMATE_WEIGHT = 0.4
@@ -65,6 +75,52 @@ def transform_point_with_matrix(y, matrix):
     return round(matrix[1][1] * y + matrix[1][2])
 
 
+def one_d_row_slice(img: np.ndarray, y: int) -> np.ndarray:
+    """given a np array it returns the y-th row """
+    assert y + 1 < img.shape[0], f"[ERROR]: one_d_row_slice tried accessing out of bound array: {img} with idx: {y + 1}"
+    return img[y:y + 1, :]
+
+
+def one_d_col_slice(img: np.ndarray, x: int) -> np.ndarray:
+    """given a np array it returns the x-th col """
+    assert x + 1 < img.shape[1], f"[ERROR]: one_d_col_slice tried accessing out of bound array: {img} with idx: {x + 1}"
+    return img[:, x:x + 1]
+
+
+def from_col_to_row(col: np.ndarray) -> np.ndarray:
+    return col.reshape((1, col.shape[0]))
+
+
+def find_n_black_point_on_row(one_d_sliced: np.ndarray, bool_threshold: int = Utils.BOOL_THRESHOLD) -> list[int]:
+    """refactor may be needed. Check TI_canny_find_n_black_point_on_row and TI_canny_find_n_black_point_on_col"""
+    bool_arr: np.ndarray = (one_d_sliced.flatten() < bool_threshold)
+
+    positions = np.where(bool_arr == 1)[0]
+
+    out = [i for i in positions]
+    popped = 0
+    for index in range(1, len(positions)):
+        if positions[index] - positions[index - 1] < 10:
+            del out[index - popped]
+            popped += 1
+
+    return out
+
+
+def interpolate_missing_value(cols_pos_x, expected_delta, threshold_delta):
+    """given a list of points, interpolate the missing value"""
+    out = []
+    for i in range(len(cols_pos_x) - 1):
+        delta = cols_pos_x[i + 1] - cols_pos_x[i]
+        if delta > threshold_delta:
+            out.append(cols_pos_x[i])
+            out.append(cols_pos_x[i] + expected_delta)
+        else:
+            out.append(cols_pos_x[i])
+    out.append(cols_pos_x[-1])
+    return out
+
+
 def get_x_cuts(cols_x_pos: List[int] | np.array) -> List[int]:
     """given the position of each column (cols_x_pos), calculate the position of all the inner cuts so that each slice
     contains only a col of circles, numbers or squares. A more flexible approach could be use if a new version of
@@ -74,7 +130,8 @@ def get_x_cuts(cols_x_pos: List[int] | np.array) -> List[int]:
         col_width: int = cols_x_pos[i_begin_col_x + 1] - cols_x_pos[i_begin_col_x] + Utils.X_COL_SHIFT
         square_width: int = col_width // 7
         for cut_number in range(7):
-            x_cut_positions.append(cols_x_pos[i_begin_col_x] + square_width * cut_number)
+            x_cut_positions.append(
+                cols_x_pos[i_begin_col_x] + square_width * cut_number + Utils.X_CUTS_SHIFTER[cut_number])
     return x_cut_positions
 
 
@@ -120,10 +177,8 @@ def evaluate_square(cropped_to_bound: np.ndarray, x_index: int,
     manual_pred, average, count = old_evaluate_square(crop_for_old_eval, x_index)
     crop_for_prediction = cropped_to_bound.flatten()
     if svm_classifier is not None and knn_classifier is not None:
-
-        svm_pred = svm_classifier.predict([crop_for_prediction])[0]
-        knn_pred = knn_classifier.predict([crop_for_prediction])[0]
-
+        svm_pred = svm_classifier.predict(crop_for_prediction.reshape(1, -1))[0]
+        knn_pred = knn_classifier.predict(crop_for_prediction.reshape(1, -1))[0]
         if x_index % 7 == 0:
             svm_pred = cast_square_to_circle(svm_classifier.predict([crop_for_prediction])[0])
             knn_pred = cast_square_to_circle(knn_classifier.predict([crop_for_prediction])[0])
@@ -131,8 +186,6 @@ def evaluate_square(cropped_to_bound: np.ndarray, x_index: int,
             return knn_pred  # if they agree, return one of them
         else:
             if x_index % 7 == 0:
-                # todo: for no known reason, the cropped version of some circle is blurred and this is ruining cls-based pred
-                # todo: maybe is due to the sheet architecture and inconsistent spacing between cols. Consider rebuild
                 return manual_pred
             # if they disagree, choose the most voted option
             chosen_pred = Counter([svm_pred, knn_pred, manual_pred]).most_common(1)[0][0]
@@ -158,7 +211,7 @@ def old_evaluate_square(crop_for_eval: np.ndarray, x_index: int) -> tuple[int, f
             return Utils.EVAL_CODE_TO_IDX.get("QB"), average, None  # QB
         else:
             count = int(np.sum(np.where(crop_for_eval[2:10] > 125)))
-            if count > 100:
+            if count > 400:
                 return Utils.EVAL_CODE_TO_IDX.get("QS"), average, count
             else:
                 return Utils.EVAL_CODE_TO_IDX.get("QA"), average, count
@@ -183,8 +236,12 @@ def evaluate_image(bgr_scw_img: np.ndarray,
     gray_img = cv2.cvtColor(bgr_scw_img, cv2.COLOR_BGR2GRAY)
 
     # apply x shift because of bad distance between black cols and circles/squares and numbers
-    cols_pos_x = np.linspace(0, bgr_scw_img.shape[1], 5, dtype=int)
-
+    cols_pos_x = find_n_black_point_on_row(one_d_row_slice(gray_img, end_question_box_y + Utils.Y_SAMPLE_POS_FOR_CUTS),
+                                           165)
+    if len(cols_pos_x) < 5:
+        cols_pos_x = interpolate_missing_value(cols_pos_x, 105, 200)
+    cols_pos_x[0] = cols_pos_x[
+                        0] + Utils.FIRST_X_CUT_SHIFT  # shift the first col to the right to compensate the fact that find_n_black_point_on_row returns the first black pixel
     x_cuts = get_x_cuts(cols_pos_x)
     x_cuts.append(cols_pos_x[-1])
     # add last col because the 2xforloop need to be up to len - 1
@@ -196,9 +253,12 @@ def evaluate_image(bgr_scw_img: np.ndarray,
     if debug == "all":
         cv2.line(draw_img, (0, begin_question_box_y), (500, begin_question_box_y), Utils.GREEN, 1)
         cv2.line(draw_img, (0, end_question_box_y), (500, end_question_box_y), Utils.GREEN, 1)
+        cv2.line(draw_img, (0, end_question_box_y + Utils.Y_SAMPLE_POS_FOR_CUTS),
+                 (500, end_question_box_y + Utils.Y_SAMPLE_POS_FOR_CUTS), Utils.RED, 1)
 
     if debug == "weak" or debug == "all":
         cv2.imshow("in", draw_img)
+    if debug == "all":
         cv2.waitKey()
 
     for y_index in range(len(y_cuts) - 1):
@@ -226,10 +286,14 @@ def evaluate_image(bgr_scw_img: np.ndarray,
 
             cropped: np.array = gray_img[y_top_left:y_bottom_right, x_top_left:x_bottom_right]
             cropped_to_bound = cu.crop_to_bounding_rectangle(cropped)
-            resized_crop = cv2.resize(cropped_to_bound, (Utils.CLASSIFIER_IMG_DIM, Utils.CLASSIFIER_IMG_DIM))
+            area = cropped_to_bound.shape[0] * cropped_to_bound.shape[1]
+            if area > 50:
+                # resize only those crops that are big enough to not get blurred
+                resized_crop = cv2.resize(cropped_to_bound, (Utils.CLASSIFIER_IMG_DIM, Utils.CLASSIFIER_IMG_DIM))
+            else:
+                resized_crop = cv2.resize(cropped, (Utils.CLASSIFIER_IMG_DIM, Utils.CLASSIFIER_IMG_DIM))
             predicted_category_index = evaluate_square(resized_crop, x_index, loaded_svm_classifier,
                                                        loaded_knn_classifier)
-
             if predicted_category_index in (Utils.EVAL_CODE_TO_IDX.get("QB"), Utils.EVAL_CODE_TO_IDX.get("QA")):
                 continue
 
@@ -378,30 +442,14 @@ def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
     # flat inner array
     corners = [corner.ravel() for corner in corners]
 
-    y_sorted = sorted(corners, key=lambda a: a[1])
-    top_points = y_sorted[:2]
-    bottom_points = y_sorted[-1:-3:-1]
-
     x_sorted = sorted(corners, key=lambda a: a[0])
-    left_points = x_sorted[:2]
-    right_points = x_sorted[-1:-3:-1]
-
-    key_points = {
-        "top_points": sorted(top_points, key=lambda a: a[0]),
-        "bottom_points": sorted(bottom_points, key=lambda a: a[0]),
-        "left_points": sorted(left_points, key=lambda a: a[1]),
-        "right_points": sorted(right_points, key=lambda a: a[1])
-    }
+    left_points = x_sorted[:4]
+    right_points = x_sorted[-1:-5:-1]
 
     # get bounding box points
-    TL_corner = key_points["top_points"][0]
-    TR_corner = key_points["top_points"][1]
-    BL_corner = key_points["bottom_points"][0]
-
-    begin_question_box_y = avg_if_close_else_max(key_points["left_points"][0][1], key_points["right_points"][0][1],
-                                                 10)
-    end_question_box_y = avg_if_close_else_min(key_points["left_points"][1][1], key_points["right_points"][1][1],
-                                               10)
+    TL_corner = sorted(left_points, key=lambda a: a[1])[0]
+    TR_corner = sorted(right_points, key=lambda a: a[1])[0]
+    BL_corner = sorted(left_points, key=lambda a: a[1])[-1]
 
     srcTri = np.array([TL_corner, TR_corner, BL_corner])
     dstTri = np.array([[0, 0], [BGR_SC_img.shape[1], 0], [0, 650]]).astype(np.float32)
@@ -409,11 +457,15 @@ def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
 
     BGR_SCW_img = cv2.warpAffine(BGR_SC_img, warp_mat, (BGR_SC_img.shape[1], BGR_SC_img.shape[0]))
 
-    transformed_begin_question_box_y = transform_point_with_matrix(begin_question_box_y, warp_mat)
-    transformed_begin_question_box_y = round(transformed_begin_question_box_y * (1-Utils.ESTIMATE_WEIGHT) + Utils.BEGIN_QUESTION_BOX_Y_ESTIMATE * Utils.ESTIMATE_WEIGHT)
-    transformed_end_question_box_y = transform_point_with_matrix(end_question_box_y, warp_mat)
-    transformed_end_question_box_y = round(transformed_end_question_box_y * (1-Utils.ESTIMATE_WEIGHT) + Utils.END_QUESTION_BOX_Y_ESTIMATE * Utils.ESTIMATE_WEIGHT)
-    return BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y
+    one_d_slice = \
+        from_col_to_row(one_d_col_slice(cv2.cvtColor(BGR_SCW_img, cv2.COLOR_BGR2GRAY), Utils.X_SAMPLE_POS_FOR_CUTS))[0]
+    left_black_points = find_n_black_point_on_row(one_d_slice, 165)
+
+    begin_question_box_y = left_black_points[
+                               0] + Utils.BEGIN_QUESTION_BOX_Y_SHIFT  # compensate the fact that find_n_black_point_on_row returns the first black pixel
+    end_question_box_y = left_black_points[1]
+
+    return BGR_SCW_img, begin_question_box_y, end_question_box_y
 
 
 def evaluator(abs_img_path: str | os.PathLike | bytes,
@@ -430,6 +482,7 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
     id_ = abs_img_path.split('_')[-1]
     if cropped_bar_code_id not in valid_ids:
+        # todo
         # cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
         cropped_bar_code_id = 0
 
