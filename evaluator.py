@@ -226,12 +226,12 @@ def old_evaluate_square(crop_for_eval: np.ndarray, x_index: int) -> tuple[int, f
 
 def evaluate_image(bgr_scw_img: np.ndarray,
                    begin_question_box_y: int, end_question_box_y: int,
-                   is_50_question_sim: int, debug: str,
+                   is_60_question_sim: int, debug: str,
                    loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier, id_):
     """heavy lifter of the program. given a processed image, return a dictionary with key: question number and
     value: given answer"""
     draw_img = bgr_scw_img.copy()
-    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 51 - 10 * int(not is_50_question_sim))}
+    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 51 - 10 * int(not is_60_question_sim))}
 
     gray_img = cv2.cvtColor(bgr_scw_img, cv2.COLOR_BGR2GRAY)
 
@@ -273,7 +273,7 @@ def evaluate_image(bgr_scw_img: np.ndarray,
             if question_letter == "L":
                 continue
 
-            if question_number >= 51 - 10 * int(not is_50_question_sim):
+            if question_number >= 51 - 10 * int(not is_60_question_sim):
                 continue
 
             x_top_left = int(not x_index % 7) + x_cuts[x_index]
@@ -356,7 +356,7 @@ def generate_score_dict(user_answer_dict: Dict[int, str]) \
     corresponding score"""
     correct_answers: list = cu.retrieve_or_display_answers()
 
-    score_dict: dict[int, float] = {i + 1: 0 for i in range(50)}
+    score_dict: dict[int, float] = {i + 1: 0 for i in range(60)}
 
     for i in range(len(user_answer_dict)):
         pre = correct_answers[i].split(";")
@@ -401,9 +401,9 @@ def compute_subject_average(all_user: list[User]):
     print(f"media matematicaLogica: {np.mean(matematicaLogica)}")
 
 
-def get_question_distribution_from_user_list(all_users: list[User], is_50_question_sim) \
+def get_question_distribution_from_user_list(all_users: list[User], is_60_question_sim) \
         -> dict[int, list[int, int, int]]:
-    question_distribution = {i: [0, 0, 0] for i in range(50 - 10 * int(not is_50_question_sim))}
+    question_distribution = {i: [0, 0, 0] for i in range(60 - 10 * int(not is_60_question_sim))}
 
     correct_answers: list = cu.retrieve_or_display_answers()
     for user in all_users:
@@ -469,7 +469,7 @@ def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
 
 
 def evaluator(abs_img_path: str | os.PathLike | bytes,
-              valid_ids: list[str], is_50_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
+              valid_ids: list[str], is_60_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
               loaded_svm_classifier: SVC | None, loaded_knn_classifier: KNeighborsClassifier | None,
               idx: int | None = None) \
         -> User:
@@ -490,13 +490,13 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = warp_affine_img(BGR_SC_img)
     user_answer_dict = evaluate_image(BGR_SCW_img,
                                       transformed_begin_question_box_y, transformed_end_question_box_y,
-                                      is_50_question_sim, debug,
+                                      is_60_question_sim, debug,
                                       loaded_svm_classifier, loaded_knn_classifier, id_)
 
     # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
     score_dict = generate_score_dict(
         user_answer_dict)
-    per_sub_score = calculate_single_sub_score(score_dict) if is_50_question_sim else []
+    per_sub_score = calculate_single_sub_score(score_dict) if is_60_question_sim else []
 
     # create user1
     user = User(cropped_bar_code_id, sum(list(score_dict.values())), per_sub_score, score_dict, user_answer_dict)
@@ -517,7 +517,7 @@ def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int
 
 
 def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
-                          valid_ids: list[str], is_50_question_sim: int | bool, debug: str,
+                          valid_ids: list[str], is_60_question_sim: int | bool, debug: str,
                           is_barcode_ean13: int | bool, max_process: int = 7) \
         -> tuple[list[User], dict[int, list[int, int, int]]]:
     """create the process obj, start them, wait for them to finish and returns the evaluated relevant obj"""
@@ -527,12 +527,12 @@ def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_ef
     loaded_knn_classifier: KNeighborsClassifier = load_model(os.path.join(path_to_models, "knn_model"))
 
     cargo = [[os.path.join(path, file_name), valid_ids,
-              is_50_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for
+              is_60_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for
              idx, file_name in enumerate(os.listdir(path))]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     with multiprocessing.Pool(processes=max_process) as pool:
         all_users: list[User] = pool.starmap(evaluator, cargo)
 
-    question_distribution = get_question_distribution_from_user_list(all_users, is_50_question_sim)
+    question_distribution = get_question_distribution_from_user_list(all_users, is_60_question_sim)
     compute_subject_average(all_users)
     return all_users, question_distribution

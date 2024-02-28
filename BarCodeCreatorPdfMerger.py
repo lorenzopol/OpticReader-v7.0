@@ -19,7 +19,7 @@ def build_sheets(path, nof_sheets):
         ean = barcode.get('ean13', id_string, writer=ImageWriter())
         filename = ean.save('ean13')
         barcode_img = cv2.imread("ean13.png")
-        scaling_factor = 0.6
+        scaling_factor = 0.85
         barcode_img = cv2.resize(barcode_img,
                                  (round(barcode_img.shape[1] * scaling_factor),
                                   round(barcode_img.shape[0] * scaling_factor)),
@@ -27,7 +27,7 @@ def build_sheets(path, nof_sheets):
 
         x_beg -= barcode_img.shape[1] // 2
 
-        cv2.putText(temp, str(f"Prova numero: {id_string[-3:len(id_string)]}"), (x_beg, y_beg - 10),
+        cv2.putText(temp, str(f"Prova numero: {id_string[-3:len(id_string)]}"), (x_beg+65, y_beg - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), thickness=2)
         temp[y_beg:y_beg + barcode_img.shape[0],
              x_beg:x_beg + barcode_img.shape[1]] = barcode_img
@@ -62,7 +62,7 @@ def decode_whole_dir(path_to_images):
 
 if __name__ == "__main__":
     print("DANGER: RUN FROM TERMINAL NOT FROM PYCHARM")
-    build_sheets(os.path.join(os.getcwd(), "screenshots/reduced_res_50QUES.png"), 750)
+    build_sheets(os.path.join(os.getcwd(), "screenshots/60 quesiti SENZA BARCODE.png"), 500)
     time.sleep(3)
     merge_to_one_pdf(os.path.join(os.getcwd(), "blank_barcoded_tests"))
     # decode_whole_dir(os.path.join(os.getcwd(), "blank_barcoded_tests"))

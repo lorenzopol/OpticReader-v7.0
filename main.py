@@ -46,7 +46,7 @@ class DpgExt:
         path = dpg.get_value("pathToScan")
         dpg.show_item("progress")
 
-        is_50_question_sim = dpg.get_value("50QuestionForm")
+        is_60_question_sim = dpg.get_value("60QuestionForm")
         is_barcode_ean13 = dpg.get_value("EAN13")
         is_multithread = dpg.get_value("MultiThread")
         is_evaluate = dpg.get_value("Evaluate")
@@ -67,7 +67,7 @@ class DpgExt:
                 path,
                 numero_di_presenti_effettivi,
                 valid_ids,
-                is_50_question_sim, debug,
+                is_60_question_sim, debug,
                 is_barcode_ean13)
         else:
             print("multithread not selected. Default behaviour will not evaluate scores")
@@ -82,7 +82,7 @@ class DpgExt:
             for filename in os.listdir(path):
                 _ = evaluator(
                     os.path.join(path, filename), valid_ids,
-                    is_50_question_sim,
+                    is_60_question_sim,
                     debug, is_barcode_ean13,
                     loaded_svm_classifier, loaded_knn_classifier)
             question_distribution = None
@@ -94,9 +94,9 @@ class DpgExt:
                 user.score = round((user.score + ceq), 2)
                 user.ceq = ceq
             sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
-            cu.pre_xlsx_dumper(workbook, cu.retrieve_or_display_answers(), is_50_question_sim)
+            cu.pre_xlsx_dumper(workbook, cu.retrieve_or_display_answers(), is_60_question_sim)
             for placement, user in enumerate(sorted_by_score_user_list):
-                cu.xlsx_dumper(user, placement + 1, workbook, is_50_question_sim)
+                cu.xlsx_dumper(user, placement + 1, workbook, is_60_question_sim)
 
             worksheet = workbook.worksheets()[0]
             for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
@@ -211,7 +211,7 @@ class DpgExt:
         question_number = int(user_data.split(":")[0])
         cu.answer_modifier(question_number, new_answer)
         DpgExt.draw_answ_table()
-        if question_number < 50:
+        if question_number < 60:
             dpg.set_value("BuilderNumber", f"{question_number + 1}:")
         else:
             dpg.set_value("BuilderNumber", f"{1}:")
@@ -299,8 +299,8 @@ def main():
                 dpg.add_input_int(label="", tag="maxPeople", width=250, default_value=800)
                 dpg.add_spacer(height=20)
             with dpg.group(horizontal=True, tag="CQN"):
-                dpg.add_text("Simulazione da 50 quesiti?")
-                dpg.add_checkbox(label="", tag="50QuestionForm", default_value=True)
+                dpg.add_text("Simulazione da 60 quesiti?")
+                dpg.add_checkbox(label="", tag="60QuestionForm", default_value=True)
                 dpg.add_spacer(width=15)
                 dpg.add_text("EAN13?")
                 dpg.add_checkbox(label="", tag="EAN13", default_value=True)
@@ -352,13 +352,13 @@ def run_with_profiling():
     prof_path = r"E:\novembre"
     prof_nof_pres_eff = len(os.listdir(prof_path))
     prof_valid_ids = [f"{i:03}" for i in range(1000)]
-    prof_is_50_question_sim = True
+    prof_is_60_question_sim = True
     prof_debug = "No"
     prof_is_barcode_ean13 = True
 
     all_users, question_distribution = dispatch_multiprocess(
         prof_path, prof_nof_pres_eff, prof_valid_ids,
-        prof_is_50_question_sim, prof_debug, prof_is_barcode_ean13)
+        prof_is_60_question_sim, prof_debug, prof_is_barcode_ean13)
 
 
 if __name__ == '__main__':
