@@ -32,6 +32,8 @@ class Utils:
     YELLOW = (0, 220, 220)
     COLOR_LIST = [BLUE, GREEN, RED, MAGENTA, CYAN, YELLOW]
 
+    NOF_QUESTIONS = 60
+
     BOOL_THRESHOLD = 200
 
     X_SAMPLE_POS_FOR_CUTS = 5
@@ -92,7 +94,6 @@ def from_col_to_row(col: np.ndarray) -> np.ndarray:
 
 
 def find_n_black_point_on_row(one_d_sliced: np.ndarray, bool_threshold: int = Utils.BOOL_THRESHOLD) -> list[int]:
-    """refactor may be needed. Check TI_canny_find_n_black_point_on_row and TI_canny_find_n_black_point_on_col"""
     bool_arr: np.ndarray = (one_d_sliced.flatten() < bool_threshold)
 
     positions = np.where(bool_arr == 1)[0]
@@ -182,11 +183,10 @@ def evaluate_square(cropped_to_bound: np.ndarray, x_index: int,
         if x_index % 7 == 0:
             svm_pred = cast_square_to_circle(svm_classifier.predict([crop_for_prediction])[0])
             knn_pred = cast_square_to_circle(knn_classifier.predict([crop_for_prediction])[0])
+
         if svm_pred == knn_pred == manual_pred:
             return knn_pred  # if they agree, return one of them
         else:
-            if x_index % 7 == 0:
-                return manual_pred
             # if they disagree, choose the most voted option
             chosen_pred = Counter([svm_pred, knn_pred, manual_pred]).most_common(1)[0][0]
             return chosen_pred
@@ -231,7 +231,7 @@ def evaluate_image(bgr_scw_img: np.ndarray,
     """heavy lifter of the program. given a processed image, return a dictionary with key: question number and
     value: given answer"""
     draw_img = bgr_scw_img.copy()
-    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 51 - 10 * int(not is_60_question_sim))}
+    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, Utils.NOF_QUESTIONS + 1 - 10 * int(not is_60_question_sim))}
 
     gray_img = cv2.cvtColor(bgr_scw_img, cv2.COLOR_BGR2GRAY)
 
@@ -240,11 +240,13 @@ def evaluate_image(bgr_scw_img: np.ndarray,
                                            165)
     if len(cols_pos_x) < 5:
         cols_pos_x = interpolate_missing_value(cols_pos_x, 105, 200)
-    cols_pos_x[0] = cols_pos_x[
-                        0] + Utils.FIRST_X_CUT_SHIFT  # shift the first col to the right to compensate the fact that find_n_black_point_on_row returns the first black pixel
+
+    # shift the first col to the right to compensate the fact that find_n_black_point_on_row returns the first black pixel
+    cols_pos_x[0] = cols_pos_x[0] + Utils.FIRST_X_CUT_SHIFT
     x_cuts = get_x_cuts(cols_pos_x)
-    x_cuts.append(cols_pos_x[-1])
+
     # add last col because the 2xforloop need to be up to len - 1
+    x_cuts.append(cols_pos_x[-1])
     if debug == "all":
         for x_cut in x_cuts:
             cv2.line(draw_img, (x_cut, 0), (x_cut, 700), Utils.CYAN, 1)
@@ -269,11 +271,10 @@ def evaluate_image(bgr_scw_img: np.ndarray,
 
             question_number = Utils.QUESTION_PER_COL * (x_index // 7) + (y_index + 1)
             question_letter = Utils.LETTERS[x_index % 7]
-
-            if question_letter == "L":
+            if question_number >= Utils.NOF_QUESTIONS + 1 - 10 * int(not is_60_question_sim):
+                print(f"in with {question_number}")
                 continue
-
-            if question_number >= 51 - 10 * int(not is_60_question_sim):
+            if user_answer_dict[question_number] == "L":
                 continue
 
             x_top_left = int(not x_index % 7) + x_cuts[x_index]
@@ -292,9 +293,11 @@ def evaluate_image(bgr_scw_img: np.ndarray,
                 resized_crop = cv2.resize(cropped_to_bound, (Utils.CLASSIFIER_IMG_DIM, Utils.CLASSIFIER_IMG_DIM))
             else:
                 resized_crop = cv2.resize(cropped, (Utils.CLASSIFIER_IMG_DIM, Utils.CLASSIFIER_IMG_DIM))
+            # cv2.imshow("crop", resized_crop)
             predicted_category_index = evaluate_square(resized_crop, x_index, loaded_svm_classifier,
                                                        loaded_knn_classifier)
-            if predicted_category_index in (Utils.EVAL_CODE_TO_IDX.get("QB"), Utils.EVAL_CODE_TO_IDX.get("QA")):
+            # cv2.waitKey(0)
+            if predicted_category_index in (Utils.EVAL_CODE_TO_IDX.get("QB"), ):
                 continue
 
             if x_index % 7:
@@ -325,29 +328,37 @@ def evaluate_image(bgr_scw_img: np.ndarray,
 def calculate_single_sub_score(score_dict: dict[int, float]):
     """Divide scores for each subject. order in return matter!"""
     noq_for_sub = {
-        "Cultura": [0, 7],
-        "biologia": [8, 17],
-        "anatomia": [19, 22],
-        "chimicaFisica": [23, 37],
-        "matematicaLogica": [38, 50]
+        "Cultura": [0, 3],
+        "ragionamento": [4, 8],
+        "biologia": [9, 27],
+        "anatomia": [28, 31],
+        "chimica": [32, 46],
+        "matefisica": [47, 60]
     }
-    risultati_Cultura, risultati_biologia, risultati_anatomia, risultati_chimicaFisica, risultati_matematicaLogica = 0, 0, 0, 0, 0
+    risultati_Cultura, \
+        risultati_ragionamento, \
+        risultati_biologia,\
+        risultati_anatomia,\
+        risultati_chimica,\
+        risultati_matematicaFisica\
+        = 0, 0, 0, 0, 0, 0
 
     for qst_number, score in score_dict.items():
         if noq_for_sub.get("Cultura")[0] <= qst_number <= noq_for_sub.get("Cultura")[1]:
             risultati_Cultura += score
+        if noq_for_sub.get("ragionamento")[0] <= qst_number <= noq_for_sub.get("ragionamento")[1]:
+            risultati_ragionamento += score
         if noq_for_sub.get("biologia")[0] <= qst_number <= noq_for_sub.get("biologia")[1]:
             risultati_biologia += score
         if noq_for_sub.get("anatomia")[0] <= qst_number <= noq_for_sub.get("anatomia")[1]:
             risultati_anatomia += score
+        if noq_for_sub.get("chimica")[0] <= qst_number <= noq_for_sub.get("chimica")[1]:
+            risultati_chimica += score
+        if noq_for_sub.get("matematicafisica")[0] <= qst_number <= noq_for_sub.get("matematicafisica")[1]:
+            risultati_matematicaFisica += score
 
-        if noq_for_sub.get("chimicaFisica")[0] <= qst_number <= noq_for_sub.get("chimicaFisica")[1]:
-            risultati_chimicaFisica += score
-        if noq_for_sub.get("matematicaLogica")[0] <= qst_number <= noq_for_sub.get("matematicaLogica")[1]:
-            risultati_matematicaLogica += score
-
-    return [risultati_Cultura, risultati_biologia, risultati_anatomia, risultati_chimicaFisica,
-            risultati_matematicaLogica]
+    return [risultati_Cultura, risultati_ragionamento, risultati_biologia, risultati_anatomia,
+            risultati_chimica, risultati_matematicaFisica]
 
 
 def generate_score_dict(user_answer_dict: Dict[int, str]) \
@@ -383,22 +394,33 @@ def generate_score_dict(user_answer_dict: Dict[int, str]) \
 
 def compute_subject_average(all_user: list[User]):
     cultura = []
+    ragionamento = []
     biologia = []
     anatomia = []
-    chimicaFisica = []
-    matematicaLogica = []
+    chimica = []
+    matematicafisica = []
+    noq_for_sub = {
+        "Cultura": [0, 3],
+        "ragionamento": [4, 8],
+        "biologia": [9, 27],
+        "anatomia": [28, 31],
+        "chimica": [32, 46],
+        "matefisica": [47, 60]
+    }
     for user in all_user:
         cultura.append(user.per_sub_score[0])
-        biologia.append(user.per_sub_score[1])
-        anatomia.append(user.per_sub_score[2])
-        chimicaFisica.append(user.per_sub_score[3])
-        matematicaLogica.append(user.per_sub_score[4])
+        ragionamento.append(user.per_sub_score[1])
+        biologia.append(user.per_sub_score[2])
+        anatomia.append(user.per_sub_score[3])
+        chimica.append(user.per_sub_score[4])
+        matematicafisica.append(user.per_sub_score[5])
 
     print(f"media cultura: {np.mean(cultura)}")
+    print(f"media ragionamento: {np.mean(ragionamento)}")
     print(f"media biologia: {np.mean(biologia)}")
     print(f"media anatomia: {np.mean(anatomia)}")
-    print(f"media chimicaFisica: {np.mean(chimicaFisica)}")
-    print(f"media matematicaLogica: {np.mean(matematicaLogica)}")
+    print(f"media chimica: {np.mean(chimica)}")
+    print(f"media matematicafisica: {np.mean(chimica)}")
 
 
 def get_question_distribution_from_user_list(all_users: list[User], is_60_question_sim) \
@@ -473,6 +495,7 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
               loaded_svm_classifier: SVC | None, loaded_knn_classifier: KNeighborsClassifier | None,
               idx: int | None = None) \
         -> User:
+    print(f"idx: {idx}")
     """entry point of application. Responsible for:
         - reading the image,
         - evaluate barcode value,
@@ -482,9 +505,7 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     cropped_bar_code_id = cu.decode_ean_barcode(BGR_img[((BGR_img.shape[0]) * 3) // 4:], is_barcode_ean13)
     id_ = abs_img_path.split('_')[-1]
     if cropped_bar_code_id not in valid_ids:
-        # todo
-        # cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
-        cropped_bar_code_id = 0
+        cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
 
     BGR_SC_img = imutils.resize(BGR_img, height=700)
     BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = warp_affine_img(BGR_SC_img)
@@ -492,7 +513,6 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
                                       transformed_begin_question_box_y, transformed_end_question_box_y,
                                       is_60_question_sim, debug,
                                       loaded_svm_classifier, loaded_knn_classifier, id_)
-
     # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
     score_dict = generate_score_dict(
         user_answer_dict)
@@ -501,19 +521,6 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     # create user1
     user = User(cropped_bar_code_id, sum(list(score_dict.values())), per_sub_score, score_dict, user_answer_dict)
     return user
-
-
-def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int) -> list[int]:
-    """given the max number of process, calculates how many files each worker has to evaluate.
-    If numero_di_presenti_effettivi is not divisible by max_process, remaning work is assigned to last worker"""
-    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_process))
-    if len(start_end_idxs) == max_process:
-        start_end_idxs.append(numero_di_presenti_effettivi)
-    else:
-        start_end_idxs[-1] = numero_di_presenti_effettivi
-    if len(start_end_idxs) == 1:
-        start_end_idxs.insert(0, 0)
-    return start_end_idxs
 
 
 def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
@@ -529,7 +536,6 @@ def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_ef
     cargo = [[os.path.join(path, file_name), valid_ids,
               is_60_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for
              idx, file_name in enumerate(os.listdir(path))]
-    start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     with multiprocessing.Pool(processes=max_process) as pool:
         all_users: list[User] = pool.starmap(evaluator, cargo)
 

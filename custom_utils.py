@@ -99,7 +99,7 @@ def pre_xlsx_dumper(workbook, correct_answers, is_50_question_sim):
                                              'valign': 'vcenter'}))
 
 
-def xlsx_dumper(user, placement, workbook, is_50_question_sim):
+def xlsx_dumper(user, placement, workbook, is_60_question_sim):
     formats = [workbook.add_format({'border': 1,
                                     'align': 'center',
                                     'valign': 'vcenter'}),
@@ -117,7 +117,7 @@ def xlsx_dumper(user, placement, workbook, is_50_question_sim):
 
     # for percentage mod *range(50)
     _3_header = ["Posizione", "ID", "Punteggio Equalizzato", "Punteggio Normale",
-                 *[0] * (50 - (10 * int(not is_50_question_sim)))]
+                 *[0] * (60 - (10 * int(not is_60_question_sim)))]
     for col_num, data in enumerate(_3_header):
         worksheet.write(3, col_num, data, workbook.add_format({'bold': 1,
                                                                'border': 1,
@@ -137,7 +137,7 @@ def xlsx_dumper(user, placement, workbook, is_50_question_sim):
                                                                                                             'align': 'center',
                                                                                                             'valign': 'vcenter', }))
     h_delta = 4
-    for number in range(h_delta, 50 + h_delta - (10 * int(not is_50_question_sim))):
+    for number in range(h_delta, 60 + h_delta - (10 * int(not is_60_question_sim))):
         worksheet.write(placement + v_delta - 1, number,
                         f'{user.sorted_user_answer_dict[number + 1 - h_delta]}',
                         formats[round(abs(user.score_dict[number - h_delta + 1]) * 2.4)])

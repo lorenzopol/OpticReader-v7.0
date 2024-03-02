@@ -63,6 +63,7 @@ class DpgExt:
         all_users = None
         question_distribution = None
         if is_multithread:
+            print("multithread selected. Default behaviour will evaluate scores")
             all_users, question_distribution = dispatch_multiprocess(
                 path,
                 numero_di_presenti_effettivi,
@@ -89,10 +90,6 @@ class DpgExt:
             all_users = None
 
         if question_distribution is not None and all_users is not None:
-            ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
-            for user in all_users:
-                user.score = round((user.score + ceq), 2)
-                user.ceq = ceq
             sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
             cu.pre_xlsx_dumper(workbook, cu.retrieve_or_display_answers(), is_60_question_sim)
             for placement, user in enumerate(sorted_by_score_user_list):
@@ -349,7 +346,7 @@ def main():
 
 
 def run_with_profiling():
-    prof_path = r"E:\novembre"
+    prof_path = r"D:\gennaio"
     prof_nof_pres_eff = len(os.listdir(prof_path))
     prof_valid_ids = [f"{i:03}" for i in range(1000)]
     prof_is_60_question_sim = True
