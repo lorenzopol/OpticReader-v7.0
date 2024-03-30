@@ -12,11 +12,11 @@
 * [Room for Improvement](#room-for-improvement)
 * [Acknowledgements](#acknowledgements)
 * [Contact](#contact)
-<!-- * [License](#license) -->
+
 
 
 ## General Information
-OpticReader is a fully autonomous OMR script capable of detecting manually marked answers, scoring them and rank the 
+OpticReader is a fully autonomous Optical Mark Recognition script capable of detecting manually marked answers, scoring them and rank the 
 participant based on their score. 
 
 It was developed to be used in simulation contexts of the national entrance test for the faculty of 
@@ -38,14 +38,12 @@ simulations.
 
 ## Assumptions
 As far as **filling the exam sheet** goes this were the latest rules given:
-- an X on a square means that the selected option (A to E) has been chosen for a given question
+- an X on a square means that the corresponding option (A to E) has been chosen for a given question
 - a blank square should be ignored
-- a fully darkened square means that the selected option should be ignored (as for blank squares)
+- a fully darkened square means that the corresponding option should be ignored (as for blank squares)
 - a marked circle (either darkened or marked with an X) means that whatever was chosen in the corresponding square should be ignored
 - there is no limit to the number of squares that can be darkened per question. It goes without saying that 5 darkened squares mean that the question has not been answered
 
-With the introduction of randomized exam's question in 2023 for the computer based entrance exam the MUR developed a **scoring 
-system** that accounts for the difficulty of each question. Detailed explanations can be found [_here_](https://www.mur.gov.it/sites/default/files/2022-09/Decreto%20Ministeriale%20n.%201107%20all.%202_valutazione%20delle%20prove%20e%20attribuzione%20dei%20punteggi.pdf). *An english version translated by me will be uploaded in the future*.
 
 ## Features
 As stated above, OpticReader can take a directory full of scanned exam sheets (check "blank exam" in the 
@@ -56,8 +54,8 @@ As stated above, OpticReader can take a directory full of scanned exam sheets (c
 [Screenshots](#screenshots) and the [Assumptions](#Assumptions) section). This is done by submitting each circle/square to three different classifiers. Each of them classify the given image and the most voted option gets chosen;
 - from the answers that have been detected a score is generated (as stated in the [Assumptions](#Assumptions) section) by comparing them to the ones given as correct;
 - after all the exams are evaluated, the difficulty score is calculated and applied to all users' scores;
-- a .xlsx file is automatically generated where all the users are ranked;
-- exam evaluation is currently done with multithreading.
+- a .xlsx file is automatically generated where all the users are sorted by their overall score;
+- exam evaluation is currently done with multiprocessing.
 
 ## Screenshots
 Some helper screenshots for those who are unfamiliar with the exam sheet layout (this is a recreation created by me)
@@ -82,7 +80,7 @@ After you have cloned this repository be sure to run BarCodeCreatorPdfMerger.py 
 4. For non-development use case insert 1 and press enter.
 5. A new window will appear. Here you can modify the solutions to each question but if you want to start a scoring session, paste the absolute path to your scanned exam images in the bottom right text field and press OK
 6. At this point, if you are using the standard template you can just press Si and wait. 
-7. It is not recommended to change any other option apart from MultiThread. If disabled, you can add debug options from the dropdown menù
+7. It is not recommended to change any other option apart from MultiProcess. If disabled, you can add debug options from the dropdown menù
 8. Wait for the scoring loop to finish. You will know when it's done because an "Excel" button will appear under the path text box
 9. Click on the "Excel" button so that Microsoft Excel can be launched to open the rankings file.
 
