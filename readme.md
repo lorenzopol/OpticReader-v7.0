@@ -17,7 +17,7 @@
 
 ## General Information
 OpticReader is a fully autonomous Optical Mark Recognition script capable of detecting manually marked answers, scoring them and rank the 
-participant based on their score. 
+participants based on their score. 
 
 It was developed to be used in simulation contexts of the national entrance test for the faculty of 
 "Medicine and Surgery". 
@@ -28,7 +28,7 @@ simulations.
 
 
 ## Technologies Used
-- dearpygui - version 1.6.2: for GUI
+- DearPyGui - version 1.6.2: for GUI
 - xlsxwriter - version 3.0.3: for the creation and population of .xlsx files
 - python-barcode - version 0.15.1: for reading and writing barcodes
 - pyzbar - version 0.1.9: as python-barcode
@@ -53,12 +53,11 @@ As stated above, OpticReader can take a directory full of scanned exam sheets (c
 - traverse the whole exam sheet identifying for each question the hand written answer, if given (check "example exam" in the 
 [Screenshots](#screenshots) and the [Assumptions](#Assumptions) section). This is done by submitting each circle/square to three different classifiers. Each of them classify the given image and the most voted option gets chosen;
 - from the answers that have been detected a score is generated (as stated in the [Assumptions](#Assumptions) section) by comparing them to the ones given as correct;
-- after all the exams are evaluated, the difficulty score is calculated and applied to all users' scores;
 - a .xlsx file is automatically generated where all the users are sorted by their overall score;
 - exam evaluation is currently done with multiprocessing.
 
 ## Screenshots
-Some helper screenshots for those who are unfamiliar with the exam sheet layout (this is a recreation created by me)
+Some helper screenshots for those who are unfamiliar with the exam sheet layout (this is a recreation created by me).
 ### Base Template
 ![Base template](screenshots/reduced_res_50QUES.png)
 ### Sample input
@@ -77,11 +76,11 @@ After you have cloned this repository be sure to run BarCodeCreatorPdfMerger.py 
 1. After scanning your exam sheets, you should have a directory where each exam sheet is a single image (filename does not matter). 
 2. Clone this directory or manually download the files
 3. You can launch `main.py` from cmd (after you have moved to the correct directory) by saying `python main.py`. 
-4. For non-development use case insert 1 and press enter.
-5. A new window will appear. Here you can modify the solutions to each question but if you want to start a scoring session, paste the absolute path to your scanned exam images in the bottom right text field and press OK
-6. At this point, if you are using the standard template you can just press Si and wait. 
-7. It is not recommended to change any other option apart from MultiProcess. If disabled, you can add debug options from the dropdown menù
-8. Wait for the scoring loop to finish. You will know when it's done because an "Excel" button will appear under the path text box
+4. For non-development use cases insert 1 in the cmd prompt and press enter.
+5. A new window will appear. Here you can modify the solutions to each question but if you want to start a scoring session, paste the absolute path to your scanned exam images in the bottom right text field and press OK.
+6. At this point, if you are using the standard template, choose "No" for the debug level and you can just press "Si" and wait. 
+7. It is not recommended to change any other option apart from MultiProcess. If disabled, you can add debug options from the dropdown menu.
+8. Wait for the scoring loop to finish. You will know when it's done because an "Excel" button will appear under the path text box.
 9. Click on the "Excel" button so that Microsoft Excel can be launched to open the rankings file.
 
 
@@ -97,16 +96,12 @@ This, in addition to the fact that paper based exams are no longer a standard ha
 The fact that I am no longer actively working on OpticReader does not mean that it is perfect. Here there are some ideas I would like to implement someday:
 
 Room for improvement:
-- despite being quite robust the **alignment** algorithm does not catch all edge cases. It would be awsome to modify the current template in order to use warpAffine function on three predetermined objects (like positional marker printed on the corners);
-- the current three-voting **classification** system is based on a SVC, KNN and a personally developed case specific algorithm. It would be interesting to see if a CNN could be implemented for such task and if new non-ML based algorithm can be developed for this task;
+- despite being quite robust the **alignment** algorithm does not catch all edge cases. It would be awsome to modify the current template in order to use warpAffine function on three predetermined objects (like positional marker printed on the corners) (as of 07/04/2024 big improvments have been done on this);
+- the current three-voting **classification** system is based on a SVC, KNN and a personally developed case specific algorithm. It would be interesting to see if a CNN could be implemented for such task and if new non-ML based algorithm can be developed for this task (as of 07/04/2024 two CNN based on LeNet and AlexNet have been developed).
 - current **GUI** is functional and user-friendly. Major work can be done to aesthetic and flexibility;
-- Currently, if run with default parameters, OpticReader runs with **multiprocessing**. Being this the latest addition and not my strongest topic, additional refinement can (and probably should) be done. 
-
-
 
 ## Acknowledgements
 Many thanks to "Studenti e prof Uniti per" association's directors, in particular to L. Barbato and A. Marchi for letting me develop and use OpticReader at the association's simulation.
-
 
 ## Contact
 Created by [Lorenzo Paolin](https://github.com/lorenzopol). If you have any request, doubt, or you need to contact me, feel free to open an Issue [*here*](https://github.com/lorenzopol/OpticReader-v7.0). 
