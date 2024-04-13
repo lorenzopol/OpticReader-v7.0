@@ -1,9 +1,17 @@
 import dearpygui.dearpygui as dpg
+
 from evaluator import dispatch_multiprocess, evaluator
-import custom_utils as cu
+import utils_main as um
+from classifiers import load_model
+
+import keras
 import os
 import xlsxwriter
-from classifiers import load_model
+
+import warnings
+
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class DpgExt:
@@ -14,14 +22,14 @@ class DpgExt:
         dpg.delete_item("TR")
         with dpg.table(parent="MRW", label="Tabella Risposte", header_row=False, tag="TR"):
             dpg.add_table_column()
-            for _entry in cu.retrieve_or_display_answers():
+            for _entry in um.retrieve_or_display_answers():
                 _qst_number, _qst_letter = _entry.split(";")[0].split(" ")
                 with dpg.table_row():
                     dpg.add_text(f"{_qst_number} {_qst_letter}")
 
     @staticmethod
     def mod_answers_file(sender, app_data, user_data):
-        cu.answer_modifier(user_data[0], user_data[1])
+        um.answer_modifier(user_data[0], user_data[1])
         DpgExt.draw_answ_table()
         dpg.set_value("num", "")
         dpg.set_value("answ", "")
@@ -33,7 +41,7 @@ class DpgExt:
     @staticmethod
     def confirm_delete(sender, app_data, user_data):
         for i in range(1, 51):
-            cu.answer_modifier(i, "")
+            um.answer_modifier(i, "")
         DpgExt.draw_answ_table()
         DpgExt.exit_confirm("", "", "")
 
@@ -75,28 +83,27 @@ class DpgExt:
             if is_evaluate:
                 loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
                 loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
+                loaded_alexnet = keras.models.load_model(os.path.join(path_to_models, "alexnet_weights.h5"))
+
             else:
                 loaded_svm_classifier = None
                 loaded_knn_classifier = None
+                loaded_alexnet = None
 
             for filename in os.listdir(path):
                 _ = evaluator(
                     os.path.join(path, filename), valid_ids,
                     is_60_question_sim,
                     debug, is_barcode_ean13,
-                    loaded_svm_classifier, loaded_knn_classifier)
+                    loaded_svm_classifier, loaded_knn_classifier, loaded_alexnet)
             question_distribution = None
             all_users = None
 
         if question_distribution is not None and all_users is not None:
-            ceq = cu.calculate_test_complexity_index(question_distribution, numero_di_presenti_effettivi, max_score=50)
-            for user in all_users:
-                user.score = round((user.score + ceq), 2)
-                user.ceq = ceq
             sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
-            cu.pre_xlsx_dumper(workbook, cu.retrieve_or_display_answers(), is_60_question_sim)
+            um.pre_xlsx_dumper(workbook, um.retrieve_or_display_answers(), is_60_question_sim)
             for placement, user in enumerate(sorted_by_score_user_list):
-                cu.xlsx_dumper(user, placement + 1, workbook, is_60_question_sim)
+                um.xlsx_dumper(user, placement + 1, workbook, is_60_question_sim)
 
             worksheet = workbook.worksheets()[0]
             for col, people_who_got_correct_not_given_and_wrong_answ in question_distribution.items():
@@ -209,7 +216,7 @@ class DpgExt:
     def build_answers(sender, app_data, user_data):
         new_answer = (dpg.get_value(sender))
         question_number = int(user_data.split(":")[0])
-        cu.answer_modifier(question_number, new_answer)
+        um.answer_modifier(question_number, new_answer)
         DpgExt.draw_answ_table()
         if question_number < 60:
             dpg.set_value("BuilderNumber", f"{question_number + 1}:")
@@ -235,7 +242,7 @@ def main():
                     no_resize=True, tag="MRW", no_close=True, no_move=True):
         with dpg.table(parent="MRW", label="Tabella Risposte", header_row=False, tag="TR"):
             dpg.add_table_column()
-            for entry in cu.retrieve_or_display_answers():
+            for entry in um.retrieve_or_display_answers():
                 qst_number, qst_letter = entry.split(";")[0].split(" ")
                 with dpg.table_row():
                     dpg.add_text(f"{qst_number} {qst_letter}")
