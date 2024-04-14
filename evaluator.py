@@ -14,7 +14,6 @@ import utils_evaluator as ue
 import utils_main as um
 
 
-
 @dataclass(order=True)
 class User:
     index: str = field(compare=False)
@@ -31,7 +30,7 @@ def transform_point_with_matrix(y, matrix):
 
 def evaluate_image(bgr_scw_img: np.ndarray,
                    begin_question_box_y: int, end_question_box_y: int,
-                   is_60_question_sim: int, debug: str, svm_classifier, knn_classifier, alexnet, id_):
+                   is_60_question_sim: int, debug: str, svm_classifier, knn_classifier, id_):
     """heavy lifter of the program. given a processed image, return a dictionary with key: question number and
     value: given answer"""
     draw_img = bgr_scw_img.copy()
@@ -97,8 +96,7 @@ def evaluate_image(bgr_scw_img: np.ndarray,
                                           (ue.Globals.CLASSIFIER_IMG_DIM, ue.Globals.CLASSIFIER_IMG_DIM))
             else:
                 resized_crop = cv2.resize(cropped, (ue.Globals.CLASSIFIER_IMG_DIM, ue.Globals.CLASSIFIER_IMG_DIM))
-            predicted_category_index = ue.evaluate_square(resized_crop, x_index, svm_classifier, knn_classifier,
-                                                          alexnet)
+            predicted_category_index = ue.evaluate_square(resized_crop, x_index, svm_classifier, knn_classifier)
             if predicted_category_index in (
                     ue.Globals.EVAL_CODE_TO_IDX.get("QB"), ue.Globals.EVAL_CODE_TO_IDX.get("QA")):
                 continue
@@ -127,6 +125,7 @@ def evaluate_image(bgr_scw_img: np.ndarray,
     if debug == "weak" or debug == "all":
         cv2.imshow("out", draw_img)
         cv2.waitKey()
+    print("in")
     return user_answer_dict
 
 
@@ -251,9 +250,105 @@ def avg_if_close_else_max(x, y, tolerance):
     return (x + y) / 2 if abs(x - y) < tolerance else max(x, y)
 
 
+def alexnet_model(shape_x, shape_y):
+    # hyperparameters
+    input_shape = (shape_x, shape_y, 1)
+    n_classes = 5
+    l2_reg = 0.
+
+    # alexnet implementation
+    alexnet = keras.models.Sequential()
+    # Layer 1
+    alexnet.add(Conv2D(96, (11, 11), input_shape=input_shape,
+                       padding='same', kernel_regularizer=l2(l2_reg)))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+    alexnet.add(MaxPooling2D(pool_size=(3, 3)))
+
+    # Layer 2
+    alexnet.add(Conv2D(256, (5, 5), padding='same'))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+    alexnet.add(MaxPooling2D(pool_size=(3, 3)))
+
+    # Layer 3
+    alexnet.add(ZeroPadding2D((1, 1)))
+    alexnet.add(Conv2D(384, (3, 3), padding='same'))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+
+    # Layer 4
+    alexnet.add(ZeroPadding2D((1, 1)))
+    alexnet.add(Conv2D(384, (3, 3), padding='same'))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+
+    # Layer 5
+    alexnet.add(ZeroPadding2D((1, 1)))
+    alexnet.add(Conv2D(256, (3, 3), padding='same'))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+    alexnet.add(MaxPooling2D(pool_size=(3, 3)))
+
+    # Layer 6
+    alexnet.add(Flatten())
+    alexnet.add(Dense(4096))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+    alexnet.add(Dropout(0.5))
+
+    # Layer 7
+    alexnet.add(Dense(4096))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('relu'))
+    alexnet.add(Dropout(0.5))
+
+    # Layer 8
+    alexnet.add(Dense(n_classes))
+    alexnet.add(BatchNormalization())
+    alexnet.add(Activation('softmax'))
+    # Compile the model
+    alexnet.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
+    return alexnet
+
+
+def lenet_model(shape_x, shape_y):
+    # hyperparameters
+    input_shape = (shape_x, shape_y, 1)
+    n_classes = 5
+    l2_reg = 0.
+
+    lenet = keras.models.Sequential()
+
+    # 2 sets of CRP (Convolution, RELU, Pooling)
+    lenet.add(Conv2D(20, (5, 5), padding="same",
+                     input_shape=input_shape, kernel_regularizer=l2(l2_reg)))
+    lenet.add(Activation("relu"))
+    lenet.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+    lenet.add(Conv2D(50, (5, 5), padding="same",
+                     kernel_regularizer=l2(l2_reg)))
+    lenet.add(Activation("relu"))
+    lenet.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+    # Fully connected layers (w/ RELU)
+    lenet.add(Flatten())
+    lenet.add(Dense(500, kernel_regularizer=l2(l2_reg)))
+    lenet.add(Activation("relu"))
+
+    # Softmax (for classification)
+    lenet.add(Dense(n_classes, kernel_regularizer=l2(l2_reg)))
+    lenet.add(Activation("softmax"))
+
+    # Return the constructed network
+    lenet.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
+
+    return lenet
+
+
 def evaluator(abs_img_path: str | os.PathLike | bytes,
               valid_ids: list[str], is_60_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
-              svm_classifier, knn_classifier, alexnet,
+              svm_classifier, knn_classifier,
               idx: int | None = None) \
         -> User:
     """entry point of application. Responsible for:
@@ -275,8 +370,7 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = ue.warp_affine_img(BGR_SC_img)
     user_answer_dict = evaluate_image(BGR_SCW_img,
                                       transformed_begin_question_box_y, transformed_end_question_box_y,
-                                      is_60_question_sim, debug, svm_classifier, knn_classifier, alexnet, id_)
-
+                                      is_60_question_sim, debug, svm_classifier, knn_classifier, id_)
     # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
     score_dict = generate_score_dict(
         user_answer_dict)
@@ -300,9 +394,6 @@ def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int
     return start_end_idxs
 
 
-def load_alexnet_wrapper():
-    model = keras.models.load_model('alexnet_weights.h5')  # Replace with your model filename
-    return model
 
 
 def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
@@ -310,14 +401,12 @@ def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_ef
                           is_barcode_ean13: int | bool, max_process: int = 7) \
         -> tuple[list[User], dict[int, list[int, int, int]]]:
     """create the process obj, start them, wait for them to finish and returns the evaluated relevant obj"""
-    path_to_models = os.getcwd()
-    svm_classifier = load_model(os.path.join(path_to_models, "new_svm_model"))
-    knn_classifier = load_model(os.path.join(path_to_models, "new_knn_model"))
-    alexnet = load_alexnet_wrapper()
+    svm_classifier = load_model(ue.Globals.SVM_PATH)
+    knn_classifier = load_model(ue.Globals.KNN_PATH)
 
     cargo = [[os.path.join(path, file_name), valid_ids,
               is_60_question_sim, debug, is_barcode_ean13,
-              svm_classifier, knn_classifier, alexnet,
+              svm_classifier, knn_classifier,
               idx] for
              idx, file_name in enumerate(os.listdir(path))]
     start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)

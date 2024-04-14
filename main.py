@@ -1,17 +1,11 @@
 import dearpygui.dearpygui as dpg
-
-from evaluator import dispatch_multiprocess, evaluator
+import evaluator as evaluator
+import utils_evaluator
 import utils_main as um
 from classifiers import load_model
 
-import keras
 import os
 import xlsxwriter
-
-import warnings
-
-warnings.filterwarnings('ignore')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class DpgExt:
@@ -68,37 +62,26 @@ class DpgExt:
 
         placement = 0
         numero_di_presenti_effettivi = len(os.listdir(path))
-        all_users = None
-        question_distribution = None
         if is_multithread:
-            all_users, question_distribution = dispatch_multiprocess(
+            all_users, question_distribution = evaluator.dispatch_multiprocess(
                 path,
                 numero_di_presenti_effettivi,
                 valid_ids,
                 is_60_question_sim, debug,
                 is_barcode_ean13)
         else:
-            print("multithread not selected. Default behaviour will not evaluate scores")
-            path_to_models = os.getcwd()
-            if is_evaluate:
-                loaded_svm_classifier = load_model(os.path.join(path_to_models, "svm_model"))
-                loaded_knn_classifier = load_model(os.path.join(path_to_models, "knn_model"))
-                loaded_alexnet = keras.models.load_model(os.path.join(path_to_models, "alexnet_weights.h5"))
-
-            else:
-                loaded_svm_classifier = None
-                loaded_knn_classifier = None
-                loaded_alexnet = None
-
+            loaded_svm_classifier = load_model(utils_evaluator.Globals.SVM_PATH)
+            loaded_knn_classifier = load_model(utils_evaluator.Globals.KNN_PATH)
+            all_users = []
             for filename in os.listdir(path):
-                _ = evaluator(
+                user = evaluator.evaluator(
                     os.path.join(path, filename), valid_ids,
                     is_60_question_sim,
                     debug, is_barcode_ean13,
-                    loaded_svm_classifier, loaded_knn_classifier, loaded_alexnet)
-            question_distribution = None
-            all_users = None
-
+                    loaded_svm_classifier, loaded_knn_classifier)
+                all_users.append(user)
+            question_distribution = evaluator.get_question_distribution_from_user_list(all_users, is_60_question_sim)
+            evaluator.compute_subject_average(all_users)
         if question_distribution is not None and all_users is not None:
             sorted_by_score_user_list = sorted(all_users, key=lambda x: (x.score, x.per_sub_score), reverse=True)
             um.pre_xlsx_dumper(workbook, um.retrieve_or_display_answers(), is_60_question_sim)
@@ -356,14 +339,14 @@ def main():
 
 
 def run_with_profiling():
-    prof_path = r"E:\novembre"
+    prof_path = r"C:\Users\loren\Downloads\aprile"
     prof_nof_pres_eff = len(os.listdir(prof_path))
     prof_valid_ids = [f"{i:03}" for i in range(1000)]
     prof_is_60_question_sim = True
     prof_debug = "No"
     prof_is_barcode_ean13 = True
 
-    all_users, question_distribution = dispatch_multiprocess(
+    all_users, question_distribution = evaluator.dispatch_multiprocess(
         prof_path, prof_nof_pres_eff, prof_valid_ids,
         prof_is_60_question_sim, prof_debug, prof_is_barcode_ean13)
 

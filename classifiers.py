@@ -371,6 +371,8 @@ def predict(model, img, actual, to_cls):
         to_predict = img.reshape(-1, shape_x, shape_y, 1)
     else:
         to_predict = img.reshape(1, -1)
+    if to_cls:
+        print(to_predict)
     prediction_array = model.predict(to_predict)[0]
 
     if not to_cls:
@@ -437,16 +439,15 @@ def test_models(model_list, path_to_dataset, is_cls):
     for k, v in errors_counter.items():
         print(f"Error: {k} occurred {v} times")
 
-
-if __name__ == "__main__":
+def main():
     dataset_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\train_and_test_data_full"
 
     lenet_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\lenet.h5"
     alexnet_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\alexnet_weights.h5"
-    svm_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\new_svm_model"
-    knn_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\new_svm_model"
+    svm_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\lol_svm_model"
+    knn_path = r"C:\Users\loren\PycharmProjects\OpticReader v7.0\lol_knn_model"
 
-    # train_cnn("lenet", dataset_path)
+    train_cnn("lenet", dataset_path)
 
     # new_svm_classifier, new_knn_classifier = new_train_svm_knn(dataset_path)
     # save_model(new_svm_classifier, svm_path)
@@ -461,9 +462,8 @@ if __name__ == "__main__":
     # test_model(keras.models.load_model(alexnet_path), dataset_path, False)
     # print(f"{'='*10} Testing alexnet {'='*10}")
     # test_model(keras.models.load_model(alexnet_path), dataset_path, False)
+    test_models([load_model(svm_path), load_model(knn_path), keras.models.load_model(lenet_path)], dataset_path, [True, True, False])
 
-    alexnet_model = keras.models.load_model(alexnet_path)
-    lenet = keras.models.load_model(lenet_path)
-    svm = load_model(svm_path)
-    knn = load_model(knn_path)
-    test_models([alexnet_model, knn, svm], dataset_path, [0, 1, 1])
+
+if __name__ == "__main__":
+    main()
