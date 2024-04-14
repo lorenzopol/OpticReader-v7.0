@@ -8,7 +8,6 @@ from pyzbar.pyzbar import decode
 from collections import Counter
 
 import pickle
-import keras
 
 
 class Globals:
@@ -58,9 +57,10 @@ class Globals:
         3: "CB",
         4: "CA"
     }
-    KNN_PATH = os.path.join(os.getcwd(), "lol_knn_model")
-    SVM_PATH = os.path.join(os.getcwd(), "lol_svm_model")
-    CNN_PATH = os.path.join(os.getcwd(), "lenet.h5")
+    KNN_PATH = os.path.join(os.getcwd(), "knn_model")
+    SVM_PATH = os.path.join(os.getcwd(), "svm_model")
+
+    NOF_QUESTIONS = 60
 
 
 def load_model(full_path_to_model):
@@ -267,27 +267,25 @@ def old_evaluate_square(crop_for_eval: np.ndarray, x_index: int) -> tuple[int, f
             return Globals.EVAL_CODE_TO_IDX.get("CA"), average, None
 
 
-def evaluate_square(cropped_to_bound: np.ndarray, x_index: int, svm_classifier, knn_classifier) -> int:
-
+def evaluate_square(cropped_to_bound: np.ndarray, x_index: int, svm_classifier, knn_classifier):
     """given the extracted image containing only a square/circle, evaluate its corresponding tag based on
-    ue.Globals.IDX_TO_EVAL_CODE """
+    Utils.IDX_TO_EVAL_CODE """
 
-    crop_for_prediction = cropped_to_bound.flatten().reshape(1, -1)
+    crop_for_old_eval = cv2.resize(cropped_to_bound, (12, 12))
+    manual_pred, average, count = old_evaluate_square(crop_for_old_eval, x_index)
+    crop_for_prediction = cropped_to_bound.flatten()
     if svm_classifier is not None and knn_classifier is not None:
+        svm_pred = svm_classifier.predict(crop_for_prediction.reshape(1, -1))[0]
+        knn_pred = knn_classifier.predict(crop_for_prediction.reshape(1, -1))[0]
         if x_index % 7 == 0:
-            svm_pred = cast_square_to_circle(svm_classifier.predict(crop_for_prediction)[0])
-            knn_pred = cast_square_to_circle(knn_classifier.predict(crop_for_prediction)[0])
-        else:
-            svm_pred = cast_circle_to_square(svm_classifier.predict(crop_for_prediction)[0])
-            knn_pred = cast_circle_to_square(knn_classifier.predict(crop_for_prediction)[0])
-            cnn_pred = cnn_pred[:3]
-            cnn_pred_shift = 0
-        cnn_pred = np.argmax(cnn_pred) + cnn_pred_shift
-        if svm_pred == knn_pred == cnn_pred:
+            svm_pred = cast_square_to_circle(svm_classifier.predict([crop_for_prediction])[0])
+            knn_pred = cast_square_to_circle(knn_classifier.predict([crop_for_prediction])[0])
+
+        if svm_pred == knn_pred == manual_pred:
             return knn_pred  # if they agree, return one of them
         else:
             # if they disagree, choose the most voted option
-            chosen_pred = Counter([svm_pred, knn_pred, cnn_pred]).most_common(1)[0][0]
+            chosen_pred = Counter([svm_pred, knn_pred, manual_pred]).most_common(1)[0][0]
             return chosen_pred
     else:
         return 0

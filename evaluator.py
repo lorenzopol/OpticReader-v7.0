@@ -1,17 +1,12 @@
 import multiprocessing
-import cv2
-import imutils
-import os
 
-import keras
-import numpy as np
+import utils_evaluator as ue
+import utils_main as um
 
 from typing import *
 from dataclasses import dataclass, field
 
 from classifiers import *
-import utils_evaluator as ue
-import utils_main as um
 
 
 @dataclass(order=True)
@@ -30,11 +25,13 @@ def transform_point_with_matrix(y, matrix):
 
 def evaluate_image(bgr_scw_img: np.ndarray,
                    begin_question_box_y: int, end_question_box_y: int,
-                   is_60_question_sim: int, debug: str, svm_classifier, knn_classifier, id_):
+                   is_60_question_sim: int, debug: str,
+                   loaded_svm_classifier: SVC, loaded_knn_classifier: KNeighborsClassifier, id_):
     """heavy lifter of the program. given a processed image, return a dictionary with key: question number and
     value: given answer"""
     draw_img = bgr_scw_img.copy()
-    user_answer_dict: Dict[int, str] = {i: "" for i in range(1, 61 - 10 * int(not is_60_question_sim))}
+    user_answer_dict: Dict[int, str] = {i: "" for i in
+                                        range(1, ue.Globals.NOF_QUESTIONS + 1 - 10 * int(not is_60_question_sim))}
 
     gray_img = cv2.cvtColor(bgr_scw_img, cv2.COLOR_BGR2GRAY)
 
@@ -42,13 +39,15 @@ def evaluate_image(bgr_scw_img: np.ndarray,
     cols_pos_x = ue.find_n_black_point_on_row(
         ue.one_d_row_slice(gray_img, end_question_box_y + ue.Globals.Y_SAMPLE_POS_FOR_CUTS),
         165)
-    while len(cols_pos_x) < 5:
+    if len(cols_pos_x) < 5:
         cols_pos_x = ue.interpolate_missing_value(cols_pos_x, 105, 200)
-    cols_pos_x[0] = cols_pos_x[
-                        0] + ue.Globals.FIRST_X_CUT_SHIFT  # shift the first col to the right to compensate the fact that find_n_black_point_on_row returns the first black pixel
+
+    # shift the first col to the right to compensate the fact that find_n_black_point_on_row returns the first black pixel
+    cols_pos_x[0] = cols_pos_x[0] + ue.Globals.FIRST_X_CUT_SHIFT
     x_cuts = ue.get_x_cuts(cols_pos_x)
-    x_cuts.append(cols_pos_x[-1])
+
     # add last col because the 2xforloop need to be up to len - 1
+    x_cuts.append(cols_pos_x[-1])
     if debug == "all":
         for x_cut in x_cuts:
             cv2.line(draw_img, (x_cut, 0), (x_cut, 700), ue.Globals.CYAN, 1)
@@ -73,11 +72,10 @@ def evaluate_image(bgr_scw_img: np.ndarray,
 
             question_number = ue.Globals.QUESTION_PER_COL * (x_index // 7) + (y_index + 1)
             question_letter = ue.Globals.LETTERS[x_index % 7]
-
-            if question_letter == "L":
+            if question_number >= ue.Globals.NOF_QUESTIONS + 1 - 10 * int(not is_60_question_sim):
+                print(f"in with {question_number}")
                 continue
-
-            if question_number >= 61 - 10 * int(not is_60_question_sim):
+            if user_answer_dict[question_number] == "L":
                 continue
 
             x_top_left = int(not x_index % 7) + x_cuts[x_index]
@@ -87,6 +85,7 @@ def evaluate_image(bgr_scw_img: np.ndarray,
 
             y_top_left: int = y_cuts[y_index]
             y_bottom_right: int = y_cuts[y_index + 1]
+
             cropped: np.array = gray_img[y_top_left:y_bottom_right, x_top_left:x_bottom_right]
             cropped_to_bound = ue.crop_to_bounding_rectangle(cropped)
             area = cropped_to_bound.shape[0] * cropped_to_bound.shape[1]
@@ -96,15 +95,17 @@ def evaluate_image(bgr_scw_img: np.ndarray,
                                           (ue.Globals.CLASSIFIER_IMG_DIM, ue.Globals.CLASSIFIER_IMG_DIM))
             else:
                 resized_crop = cv2.resize(cropped, (ue.Globals.CLASSIFIER_IMG_DIM, ue.Globals.CLASSIFIER_IMG_DIM))
-            predicted_category_index = ue.evaluate_square(resized_crop, x_index, svm_classifier, knn_classifier)
-            if predicted_category_index in (
-                    ue.Globals.EVAL_CODE_TO_IDX.get("QB"), ue.Globals.EVAL_CODE_TO_IDX.get("QA")):
+            # cv2.imshow("crop", resized_crop)
+            predicted_category_index = ue.evaluate_square(resized_crop, x_index, loaded_svm_classifier,
+                                                          loaded_knn_classifier)
+            # cv2.waitKey(0)
+            if predicted_category_index in (ue.Globals.EVAL_CODE_TO_IDX.get("QB"),):
                 continue
 
             if x_index % 7:
                 # è un quadrato
                 if predicted_category_index in (
-                        ue.Globals.EVAL_CODE_TO_IDX.get("QS"), ue.Globals.EVAL_CODE_TO_IDX.get("CA")):
+                ue.Globals.EVAL_CODE_TO_IDX.get("QS"), ue.Globals.EVAL_CODE_TO_IDX.get("CA")):
                     # QS
                     cv2.rectangle(draw_img, (x_top_left, y_top_left), (x_bottom_right, y_bottom_right),
                                   ue.Globals.GREEN, 1)
@@ -125,7 +126,6 @@ def evaluate_image(bgr_scw_img: np.ndarray,
     if debug == "weak" or debug == "all":
         cv2.imshow("out", draw_img)
         cv2.waitKey()
-    print("in")
     return user_answer_dict
 
 
@@ -190,9 +190,9 @@ def generate_score_dict(user_answer_dict: Dict[int, str]) \
             if user_letter in letter:
                 # check if the given letter is IN the corrected letters (no "==" since, by mistake, more options
                 # could be correct)
-                score_dict[i + 1] = 1.5
+                score_dict[i + 1] = 1
             else:
-                score_dict[i + 1] = -0.4
+                score_dict[i + 1] = -0.25
     return score_dict
 
 
@@ -203,6 +203,14 @@ def compute_subject_average(all_user: list[User]):
     anatomia = []
     chimica = []
     matematicafisica = []
+    noq_for_sub = {
+        "Cultura": [0, 3],
+        "ragionamento": [4, 8],
+        "biologia": [9, 27],
+        "anatomia": [28, 31],
+        "chimica": [32, 46],
+        "matefisica": [47, 60]
+    }
     for user in all_user:
         cultura.append(user.per_sub_score[0])
         ragionamento.append(user.per_sub_score[1])
@@ -250,105 +258,46 @@ def avg_if_close_else_max(x, y, tolerance):
     return (x + y) / 2 if abs(x - y) < tolerance else max(x, y)
 
 
-def alexnet_model(shape_x, shape_y):
-    # hyperparameters
-    input_shape = (shape_x, shape_y, 1)
-    n_classes = 5
-    l2_reg = 0.
+def warp_affine_img(BGR_SC_img: np.ndarray) -> tuple[np.ndarray, int, int]:
+    """warp affine the scaled image to straight the question box and make it fit full width"""
+    GRAY_SC_img = cv2.cvtColor(BGR_SC_img, cv2.COLOR_BGR2GRAY)
+    dst = cv2.cornerHarris(GRAY_SC_img, 2, 3, 0.04)
 
-    # alexnet implementation
-    alexnet = keras.models.Sequential()
-    # Layer 1
-    alexnet.add(Conv2D(96, (11, 11), input_shape=input_shape,
-                       padding='same', kernel_regularizer=l2(l2_reg)))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
-    alexnet.add(MaxPooling2D(pool_size=(3, 3)))
+    # Find corner points using goodFeaturesToTrack
+    corners = cv2.goodFeaturesToTrack(dst, 500, .01, 10)
+    # flat inner array
+    corners = [corner.ravel() for corner in corners]
 
-    # Layer 2
-    alexnet.add(Conv2D(256, (5, 5), padding='same'))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
-    alexnet.add(MaxPooling2D(pool_size=(3, 3)))
+    x_sorted = sorted(corners, key=lambda a: a[0])
+    left_points = x_sorted[:4]
+    right_points = x_sorted[-1:-5:-1]
 
-    # Layer 3
-    alexnet.add(ZeroPadding2D((1, 1)))
-    alexnet.add(Conv2D(384, (3, 3), padding='same'))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
+    # get bounding box points
+    TL_corner = sorted(left_points, key=lambda a: a[1])[0]
+    TR_corner = sorted(right_points, key=lambda a: a[1])[0]
+    BL_corner = sorted(left_points, key=lambda a: a[1])[-1]
 
-    # Layer 4
-    alexnet.add(ZeroPadding2D((1, 1)))
-    alexnet.add(Conv2D(384, (3, 3), padding='same'))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
+    srcTri = np.array([TL_corner, TR_corner, BL_corner])
+    dstTri = np.array([[0, 0], [BGR_SC_img.shape[1], 0], [0, 650]]).astype(np.float32)
+    warp_mat = cv2.getAffineTransform(srcTri, dstTri).astype(np.float32)
 
-    # Layer 5
-    alexnet.add(ZeroPadding2D((1, 1)))
-    alexnet.add(Conv2D(256, (3, 3), padding='same'))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
-    alexnet.add(MaxPooling2D(pool_size=(3, 3)))
+    BGR_SCW_img = cv2.warpAffine(BGR_SC_img, warp_mat, (BGR_SC_img.shape[1], BGR_SC_img.shape[0]))
 
-    # Layer 6
-    alexnet.add(Flatten())
-    alexnet.add(Dense(4096))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
-    alexnet.add(Dropout(0.5))
+    one_d_slice = \
+        ue.from_col_to_row(
+            ue.one_d_col_slice(cv2.cvtColor(BGR_SCW_img, cv2.COLOR_BGR2GRAY), ue.Globals.X_SAMPLE_POS_FOR_CUTS))[0]
+    left_black_points = ue.find_n_black_point_on_row(one_d_slice, 165)
 
-    # Layer 7
-    alexnet.add(Dense(4096))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('relu'))
-    alexnet.add(Dropout(0.5))
+    begin_question_box_y = left_black_points[
+                               0] + ue.Globals.BEGIN_QUESTION_BOX_Y_SHIFT  # compensate the fact that find_n_black_point_on_row returns the first black pixel
+    end_question_box_y = left_black_points[1]
 
-    # Layer 8
-    alexnet.add(Dense(n_classes))
-    alexnet.add(BatchNormalization())
-    alexnet.add(Activation('softmax'))
-    # Compile the model
-    alexnet.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
-    return alexnet
-
-
-def lenet_model(shape_x, shape_y):
-    # hyperparameters
-    input_shape = (shape_x, shape_y, 1)
-    n_classes = 5
-    l2_reg = 0.
-
-    lenet = keras.models.Sequential()
-
-    # 2 sets of CRP (Convolution, RELU, Pooling)
-    lenet.add(Conv2D(20, (5, 5), padding="same",
-                     input_shape=input_shape, kernel_regularizer=l2(l2_reg)))
-    lenet.add(Activation("relu"))
-    lenet.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-
-    lenet.add(Conv2D(50, (5, 5), padding="same",
-                     kernel_regularizer=l2(l2_reg)))
-    lenet.add(Activation("relu"))
-    lenet.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-
-    # Fully connected layers (w/ RELU)
-    lenet.add(Flatten())
-    lenet.add(Dense(500, kernel_regularizer=l2(l2_reg)))
-    lenet.add(Activation("relu"))
-
-    # Softmax (for classification)
-    lenet.add(Dense(n_classes, kernel_regularizer=l2(l2_reg)))
-    lenet.add(Activation("softmax"))
-
-    # Return the constructed network
-    lenet.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
-
-    return lenet
+    return BGR_SCW_img, begin_question_box_y, end_question_box_y
 
 
 def evaluator(abs_img_path: str | os.PathLike | bytes,
               valid_ids: list[str], is_60_question_sim: int | bool, debug: str, is_barcode_ean13: int | bool,
-              svm_classifier, knn_classifier,
+              loaded_svm_classifier: SVC | None, loaded_knn_classifier: KNeighborsClassifier | None,
               idx: int | None = None) \
         -> User:
     """entry point of application. Responsible for:
@@ -360,17 +309,17 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     crop_for_barcode = BGR_img[((BGR_img.shape[0]) * 3) // 4:]
     cropped_bar_code_id = ue.decode_ean_barcode(crop_for_barcode, is_barcode_ean13)
     id_ = abs_img_path.split('_')[-1]
-    print(f"processing {id_}")
     if cropped_bar_code_id not in valid_ids:
         # todo
         # cropped_bar_code_id = input(f"lettura BARCODE fallita per {abs_img_path} >>")
         cropped_bar_code_id = id_
 
     BGR_SC_img = imutils.resize(BGR_img, height=700)
-    BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = ue.warp_affine_img(BGR_SC_img)
+    BGR_SCW_img, transformed_begin_question_box_y, transformed_end_question_box_y = warp_affine_img(BGR_SC_img)
     user_answer_dict = evaluate_image(BGR_SCW_img,
                                       transformed_begin_question_box_y, transformed_end_question_box_y,
-                                      is_60_question_sim, debug, svm_classifier, knn_classifier, id_)
+                                      is_60_question_sim, debug,
+                                      loaded_svm_classifier, loaded_knn_classifier, id_)
     # since equal scores are resolved by whoever got the most in the first section and on, calculate the score per sec
     score_dict = generate_score_dict(
         user_answer_dict)
@@ -381,35 +330,19 @@ def evaluator(abs_img_path: str | os.PathLike | bytes,
     return user
 
 
-def calculate_start_end_idxs(numero_di_presenti_effettivi: int, max_process: int) -> list[int]:
-    """given the max number of process, calculates how many files each worker has to evaluate.
-    If numero_di_presenti_effettivi is not divisible by max_process, remaning work is assigned to last worker"""
-    start_end_idxs = list(range(0, numero_di_presenti_effettivi, numero_di_presenti_effettivi // max_process))
-    if len(start_end_idxs) == max_process:
-        start_end_idxs.append(numero_di_presenti_effettivi)
-    else:
-        start_end_idxs[-1] = numero_di_presenti_effettivi
-    if len(start_end_idxs) == 1:
-        start_end_idxs.insert(0, 0)
-    return start_end_idxs
-
-
-
-
 def dispatch_multiprocess(path: str | os.PathLike | bytes, numero_di_presenti_effettivi: int,
                           valid_ids: list[str], is_60_question_sim: int | bool, debug: str,
                           is_barcode_ean13: int | bool, max_process: int = 7) \
         -> tuple[list[User], dict[int, list[int, int, int]]]:
     """create the process obj, start them, wait for them to finish and returns the evaluated relevant obj"""
-    svm_classifier = load_model(ue.Globals.SVM_PATH)
-    knn_classifier = load_model(ue.Globals.KNN_PATH)
+    path_to_models = os.getcwd()
+
+    loaded_svm_classifier: SVC = load_model(os.path.join(path_to_models, "svm_model"))
+    loaded_knn_classifier: KNeighborsClassifier = load_model(os.path.join(path_to_models, "knn_model"))
 
     cargo = [[os.path.join(path, file_name), valid_ids,
-              is_60_question_sim, debug, is_barcode_ean13,
-              svm_classifier, knn_classifier,
-              idx] for
+              is_60_question_sim, debug, is_barcode_ean13, loaded_svm_classifier, loaded_knn_classifier, idx] for
              idx, file_name in enumerate(os.listdir(path))]
-    start_end_idxs = calculate_start_end_idxs(numero_di_presenti_effettivi, max_process)
     with multiprocessing.Pool(processes=max_process) as pool:
         all_users: list[User] = pool.starmap(evaluator, cargo)
 
